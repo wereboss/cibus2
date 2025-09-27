@@ -8,6 +8,7 @@ from datetime import datetime
 # Local imports
 from .db_manager import create_db_and_table, insert_run_record
 from .config_manager import load_config
+from .profiler import run_profiling
 
 # Set up basic logging
 logging.basicConfig(
@@ -25,7 +26,7 @@ def setup_project_directories():
     try:
         output_folder.mkdir(parents=True, exist_ok=True)
         db_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Project directories created or verified.")
+        logger.info("Project directories created or verified.")
     except Exception as e:
         logger.error(f"Failed to create project directories: {e}")
         raise
@@ -53,13 +54,19 @@ def main(args=None):
         )
         args = parser.parse_args()
 
-    # Get filenames for logging
-    layout_filename = Path(args.layout).name
-    handoff_filename = Path(args.handoff).name
+    # Get file paths and names for logging
+    layout_file_path = Path(args.layout)
+    handoff_file_path = Path(args.handoff)
     
-    # Generate a unique output JSON filename
+    layout_filename = layout_file_path.name
+    handoff_filename = handoff_file_path.name
+
+    # Generate a unique output JSON file path within the configured output folder
+    config = load_config()
+    output_folder = Path(config['output_folder'])
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_json_filename = f"profile_output_{timestamp_str}.json"
+    output_json_path = output_folder / output_json_filename
 
     # Set up directories and database
     try:
@@ -79,9 +86,11 @@ def main(args=None):
     logger.info(f"Run recorded with ID: {run_id}")
     logger.info(f"Processing '{layout_filename}' and '{handoff_filename}'...")
 
-    # TODO: Add call to profiler.py once implemented
-    # from .profiler import run_profiling
-    # run_profiling(args.layout, args.handoff, output_json_filename)
+    # Call the core profiling function
+    try:
+        run_profiling(layout_file_path, handoff_file_path, output_json_path)
+    except Exception as e:
+        logger.error(f"Profiling failed: {e}")
 
 if __name__ == "__main__":
     main()

@@ -4,6 +4,8 @@ import logging
 import json
 import pandas as pd
 import numpy as np
+import re
+import math
 from pathlib import Path
 from typing import Dict, Any
 
@@ -29,13 +31,69 @@ def read_cobol_layout(layout_file_path: Path) -> pd.DataFrame:
 
 def get_colspecs(layout_df: pd.DataFrame) -> tuple:
     """
-    Generates column specifications (start, end) for pandas from the layout.
+    Generates column specifications (start, end) for pandas from the layout,
+    based on COBOL data type specs including COMP, COMP-3, etc.
     """
     colspecs = []
     current_pos = 0
     try:
         for _, row in layout_df.iterrows():
-            length = int(row['data type with length'].split('(')[1].replace(')',''))
+            data_type_spec = str(row['data type with length']).strip().upper()
+            
+            length = 0
+            is_numeric = False
+            
+            # --- Handle COMP, COMP-3, COMP-4, COMP-5 ---
+            if 'COMP-3' in data_type_spec:
+                match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', data_type_spec)
+                if match:
+                    is_numeric = True
+                    s9_len = int(match.group(1))
+                    v9_len = 0
+                    if match.group(2): # Checks if the V99 part exists
+                        if match.group(3): # Checks for V99(n)
+                            v9_len = int(match.group(3).strip('()'))
+                        else: # Just V99
+                            v9_len = len(match.group(2).replace('V', ''))
+                    total_digits = s9_len + v9_len
+                    length = math.ceil((total_digits + 1) / 2)
+            elif any(x in data_type_spec for x in ['COMP-4', 'COMP-5', 'COMP', 'BINARY']):
+                match = re.search(r'S9\((\d+)\)', data_type_spec)
+                if match:
+                    is_numeric = True
+                    digits = int(match.group(1))
+                    if digits <= 4:
+                        length = 2 # Half-word
+                    elif digits <= 9:
+                        length = 4 # Full-word
+                    elif digits <= 18:
+                        length = 8 # Double-word
+                    else:
+                        logger.warning(f"Unsupported COMP length: {digits}")
+                        raise ValueError(f"Unsupported COMP length: {digits}")
+            
+            # --- Handle standard X and S9 ---
+            elif 'X' in data_type_spec:
+                match = re.search(r'X\((\d+)\)', data_type_spec)
+                if match:
+                    length = int(match.group(1))
+            elif 'S9' in data_type_spec:
+                match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', data_type_spec)
+                if match:
+                    is_numeric = True
+                    s9_len = int(match.group(1))
+                    v9_len = 0
+                    if match.group(2):
+                        if match.group(3):
+                            v9_len = int(match.group(3).strip('()'))
+                        else:
+                            v9_len = len(match.group(2).replace('V', ''))
+                    length = s9_len + v9_len
+
+            if length == 0:
+                logger.error(f"Could not parse length from spec: {data_type_spec}")
+                raise ValueError(f"Invalid data type specification: {data_type_spec}")
+            
             colspecs.append((current_pos, current_pos + length))
             current_pos += length
         return colspecs
@@ -75,55 +133,81 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
         
         # Determine the original data type and length from the layout
         layout_row = layout_df[layout_df['handoff column name'] == col_name].iloc[0]
-        original_type = layout_row['data type with length'].split('(')[0].lower()
-        original_length = int(layout_row['data type with length'].split('(')[1].replace(')',''))
-
+        original_spec = layout_row['data type with length'].upper()
+        
+        # Get length from layout (re-parsing to be safe)
+        length = 0
+        is_numeric = False
+        if 'COMP-3' in original_spec:
+            is_numeric = True
+            match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', original_spec)
+            if match:
+                s9_len = int(match.group(1))
+                v9_len = 0
+                if match.group(2):
+                    if match.group(3):
+                        v9_len = int(match.group(3).strip('()'))
+                    else:
+                        v9_len = len(match.group(2).replace('V', ''))
+                total_digits = s9_len + v9_len
+                length = math.ceil((total_digits + 1) / 2)
+        elif any(x in original_spec for x in ['COMP-4', 'COMP-5', 'COMP', 'BINARY']):
+            is_numeric = True
+            match = re.search(r'S9\((\d+)\)', original_spec)
+            if match:
+                digits = int(match.group(1))
+                if digits <= 4: length = 2
+                elif digits <= 9: length = 4
+                elif digits <= 18: length = 8
+        elif 'X' in original_spec:
+            match = re.search(r'X\((\d+)\)', original_spec)
+            if match: length = int(match.group(1))
+        elif 'S9' in original_spec:
+            is_numeric = True
+            match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', original_spec)
+            if match:
+                s9_len = int(match.group(1))
+                v9_len = 0
+                if match.group(2):
+                    if match.group(3):
+                        v9_len = int(match.group(3).strip('()'))
+                    else:
+                        v9_len = len(match.group(2).replace('V', ''))
+                length = s9_len + v9_len
+        
         col_profile = {
             'original_name': col_name,
-            'original_type': original_type,
-            'length': original_length,
+            'original_spec': original_spec,
+            'length': length,
             'total_count': len(df),
             'null_count': len(df) - len(series),
             'null_percentage': round((len(df) - len(series)) / len(df) * 100, 2)
         }
         
-        # Check for unique values (is_categorical)
         unique_vals = series.unique()
         unique_count = len(unique_vals)
         col_profile['unique_count'] = unique_count
         col_profile['unique_percentage'] = round(unique_count / len(df) * 100, 2)
         
-        if unique_count <= 20 and len(series) > 0: # Check for a low number of unique values
+        if unique_count <= 20 and len(series) > 0:
             col_profile['is_categorical'] = True
             col_profile['enum_values'] = series.value_counts().to_dict()
         else:
             col_profile['is_categorical'] = False
             col_profile['sample_values'] = list(series.sample(min(10, unique_count)))
             
-        # Numeric-specific profiling
-        if 'numeric' in original_type.lower():
+        if is_numeric:
             try:
                 numeric_series = pd.to_numeric(series)
-                metrics = {
-                    'min': numeric_series.min(),
-                    'max': numeric_series.max(),
-                    'mean': numeric_series.mean(),
-                    'median': numeric_series.median(),
-                    'std_dev': numeric_series.std()
-                }
-                # Convert all numpy numeric types to standard Python floats
+                metrics = {'min': numeric_series.min(), 'max': numeric_series.max(), 'mean': numeric_series.mean(), 'median': numeric_series.median(), 'std_dev': numeric_series.std()}
                 col_profile['metrics'] = {key: float(value) for key, value in metrics.items()}
             except ValueError:
                 logger.warning(f"Could not convert column '{col_name}' to numeric. Skipping numeric profiling.")
                 
         profile_data[col_name] = col_profile
 
-    # 4. Save the profile to a JSON file
-    # We must ensure the output directory exists
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
-    
     with open(output_file_path, 'w') as f:
         json.dump(profile_data, f, indent=4)
     logger.info(f"Profiling complete. Output saved to {output_file_path}")
-
     return profile_data
