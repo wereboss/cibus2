@@ -7,23 +7,28 @@ from pathlib import Path
 # Set up logging for this module
 logger = logging.getLogger(__name__)
 
-def load_config():
+def load_config(config_path: Path = None):
     """
     Loads configuration parameters from the config.json file.
-
+    
+    Args:
+        config_path (Path, optional): The path to the config file. 
+                                      Defaults to './config.json'.
+    
     Returns:
         dict: A dictionary containing the configuration parameters.
     
     Raises:
-        FileNotFoundError: If config.json is not found at the project root.
+        FileNotFoundError: If config.json is not found.
         json.JSONDecodeError: If there's an issue parsing the JSON file.
         KeyError: If a required key is missing from the config.
     """
-    config_path = Path('./config.json')
+    if config_path is None:
+        config_path = Path('./config.json')
 
     if not config_path.is_file():
         logger.error(f"Configuration file not found at {config_path.resolve()}.")
-        raise FileNotFoundError(f"config.json not found.")
+        raise FileNotFoundError(f"config.json not found at {config_path.resolve()}")
 
     try:
         with open(config_path, 'r') as f:

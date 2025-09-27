@@ -1,0 +1,64 @@
+{
+    "CUSTOMER_ID": {
+        "original_name": "CUSTOMER_ID",
+        "original_type": "numeric",
+        "length": 10,
+        "total_count": 3,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 3,
+        "unique_percentage": 100.0,
+        "is_categorical": true,
+        "enum_values": {
+            "0000000001": 1,
+            "0000000002": 1,
+            "0000000003": 1
+        },
+        "metrics": {
+            "min": 1.0,
+            "max": 3.0,
+            "mean": 2.0,
+            "median": 2.0,
+            "std_dev": 1.0
+        }
+    },
+    "CUSTOMER_NAME": {
+        "original_name": "CUSTOMER_NAME",
+        "original_type": "alpha",
+        "length": 20,
+        "total_count": 3,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 3,
+        "unique_percentage": 100.0,
+        "is_categorical": true,
+        "enum_values": {
+            "JOHN DOE": 1,
+            "JANE SMITH": 1,
+            "PETER JONES": 1
+        }
+    },
+    "INVOICE_AMOUNT": {
+        "original_name": "INVOICE_AMOUNT",
+        "original_type": "numeric",
+        "length": 12,
+        "total_count": 3,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 3,
+        "unique_percentage": 100.0,
+        "is_categorical": true,
+        "enum_values": {
+            "000000100.50": 1,
+            "000000050.25": 1,
+            "000000200.00": 1
+        },
+        "metrics": {
+            "min": 50.25,
+            "max": 200.0,
+            "mean": 116.91666666666667,
+            "median": 100.5,
+            "std_dev": 76.21283247152893
+        }
+    }
+}
