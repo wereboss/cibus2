@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 # Set up logging for this module
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def read_cobol_layout(layout_file_path: Path) -> pd.DataFrame:
@@ -17,7 +18,6 @@ def read_cobol_layout(layout_file_path: Path) -> pd.DataFrame:
     Reads the COBOL layout from an Excel file and returns a DataFrame.
     """
     try:
-        # Assuming the layout is in the first sheet and has a header
         df = pd.read_excel(layout_file_path, engine='openpyxl')
         df.columns = df.columns.str.lower()
         required_cols = ['handoff column name', 'data type with length', 'description']
@@ -41,33 +41,25 @@ def get_colspecs(layout_df: pd.DataFrame) -> tuple:
             data_type_spec = str(row['data type with length']).strip().upper()
             
             length = 0
-            is_numeric = False
             
             # --- Handle COMP, COMP-3, COMP-4, COMP-5 ---
             if 'COMP-3' in data_type_spec:
-                match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', data_type_spec)
-                if match:
-                    is_numeric = True
-                    s9_len = int(match.group(1))
-                    v9_len = 0
-                    if match.group(2): # Checks if the V99 part exists
-                        if match.group(3): # Checks for V99(n)
-                            v9_len = int(match.group(3).strip('()'))
-                        else: # Just V99
-                            v9_len = len(match.group(2).replace('V', ''))
-                    total_digits = s9_len + v9_len
-                    length = math.ceil((total_digits + 1) / 2)
+                s9_match = re.search(r'S9\((\d+)\)', data_type_spec)
+                v_match = re.search(r'V9+(\(\d+\))?', data_type_spec)
+                s9_len = int(s9_match.group(1)) if s9_match else 0
+                v9_len = int(v_match.group(1).strip('()')) if v_match and v_match.group(1) else len(v_match.group(0).replace('V', '')) if v_match else 0
+                total_digits = s9_len + v9_len
+                length = math.ceil((total_digits + 1) / 2)
             elif any(x in data_type_spec for x in ['COMP-4', 'COMP-5', 'COMP', 'BINARY']):
                 match = re.search(r'S9\((\d+)\)', data_type_spec)
                 if match:
-                    is_numeric = True
                     digits = int(match.group(1))
                     if digits <= 4:
-                        length = 2 # Half-word
+                        length = 2
                     elif digits <= 9:
-                        length = 4 # Full-word
+                        length = 4
                     elif digits <= 18:
-                        length = 8 # Double-word
+                        length = 8
                     else:
                         logger.warning(f"Unsupported COMP length: {digits}")
                         raise ValueError(f"Unsupported COMP length: {digits}")
@@ -78,22 +70,17 @@ def get_colspecs(layout_df: pd.DataFrame) -> tuple:
                 if match:
                     length = int(match.group(1))
             elif 'S9' in data_type_spec:
-                match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', data_type_spec)
-                if match:
-                    is_numeric = True
-                    s9_len = int(match.group(1))
-                    v9_len = 0
-                    if match.group(2):
-                        if match.group(3):
-                            v9_len = int(match.group(3).strip('()'))
-                        else:
-                            v9_len = len(match.group(2).replace('V', ''))
-                    length = s9_len + v9_len
+                s9_match = re.search(r'S9\((\d+)\)', data_type_spec)
+                v_match = re.search(r'V9+(\(\d+\))?', data_type_spec)
+                s9_len = int(s9_match.group(1)) if s9_match else 0
+                v9_len = int(v_match.group(1).strip('()')) if v_match and v_match.group(1) else len(v_match.group(0).replace('V', '')) if v_match else 0
+                length = s9_len + v9_len
 
             if length == 0:
                 logger.error(f"Could not parse length from spec: {data_type_spec}")
                 raise ValueError(f"Invalid data type specification: {data_type_spec}")
             
+            logger.debug(f"Parsed spec '{data_type_spec}': length = {length}")
             colspecs.append((current_pos, current_pos + length))
             current_pos += length
         return colspecs
@@ -119,7 +106,7 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
             colspecs=colspecs, 
             names=column_names, 
             header=None,
-            dtype='string'  # Read all columns as strings to preserve leading zeros
+            dtype='string'
         )
         logger.info(f"Successfully loaded {len(df)} rows from handoff file.")
     except Exception as e:
@@ -131,26 +118,22 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
     for col_name in df.columns:
         series = df[col_name].dropna().astype(str).str.strip()
         
-        # Determine the original data type and length from the layout
         layout_row = layout_df[layout_df['handoff column name'] == col_name].iloc[0]
         original_spec = layout_row['data type with length'].upper()
         
-        # Get length from layout (re-parsing to be safe)
+        v_match = re.search(r'V9+(\(\d+\))?', original_spec)
+        decimal_places = int(v_match.group(1).strip('()')) if v_match and v_match.group(1) else len(v_match.group(0).replace('V', '')) if v_match else 0
+
         length = 0
         is_numeric = False
         if 'COMP-3' in original_spec:
             is_numeric = True
-            match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', original_spec)
-            if match:
-                s9_len = int(match.group(1))
-                v9_len = 0
-                if match.group(2):
-                    if match.group(3):
-                        v9_len = int(match.group(3).strip('()'))
-                    else:
-                        v9_len = len(match.group(2).replace('V', ''))
-                total_digits = s9_len + v9_len
-                length = math.ceil((total_digits + 1) / 2)
+            s9_match = re.search(r'S9\((\d+)\)', original_spec)
+            v_match_profile = re.search(r'V9+(\(\d+\))?', original_spec)
+            s9_len = int(s9_match.group(1)) if s9_match else 0
+            v9_len = int(v_match_profile.group(1).strip('()')) if v_match_profile and v_match_profile.group(1) else len(v_match_profile.group(0).replace('V', '')) if v_match_profile else 0
+            total_digits = s9_len + v9_len
+            length = math.ceil((total_digits + 1) / 2)
         elif any(x in original_spec for x in ['COMP-4', 'COMP-5', 'COMP', 'BINARY']):
             is_numeric = True
             match = re.search(r'S9\((\d+)\)', original_spec)
@@ -164,17 +147,12 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
             if match: length = int(match.group(1))
         elif 'S9' in original_spec:
             is_numeric = True
-            match = re.search(r'S9\((\d+)\)(V9+(\(\d+\))?)?', original_spec)
-            if match:
-                s9_len = int(match.group(1))
-                v9_len = 0
-                if match.group(2):
-                    if match.group(3):
-                        v9_len = int(match.group(3).strip('()'))
-                    else:
-                        v9_len = len(match.group(2).replace('V', ''))
-                length = s9_len + v9_len
-        
+            s9_match = re.search(r'S9\((\d+)\)', original_spec)
+            v_match_profile = re.search(r'V9+(\(\d+\))?', original_spec)
+            s9_len = int(s9_match.group(1)) if s9_match else 0
+            v9_len = int(v_match_profile.group(1).strip('()')) if v_match_profile and v_match_profile.group(1) else len(v_match_profile.group(0).replace('V', '')) if v_match_profile else 0
+            length = s9_len + v9_len
+
         col_profile = {
             'original_name': col_name,
             'original_spec': original_spec,
@@ -189,15 +167,19 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
         col_profile['unique_count'] = unique_count
         col_profile['unique_percentage'] = round(unique_count / len(df) * 100, 2)
         
-        if unique_count <= 20 and len(series) > 0:
-            col_profile['is_categorical'] = True
+        is_categorical = (unique_count <= 20 and len(series) > 0) and (unique_count / len(df) < 0.5)
+        col_profile['is_categorical'] = is_categorical
+
+        if is_categorical:
             col_profile['enum_values'] = series.value_counts().to_dict()
         else:
-            col_profile['is_categorical'] = False
             col_profile['sample_values'] = list(series.sample(min(10, unique_count)))
             
         if is_numeric:
             try:
+                if decimal_places > 0:
+                    series = series.apply(lambda x: x[:(len(x)-decimal_places)] + '.' + x[(len(x)-decimal_places):])
+
                 numeric_series = pd.to_numeric(series)
                 metrics = {'min': numeric_series.min(), 'max': numeric_series.max(), 'mean': numeric_series.mean(), 'median': numeric_series.median(), 'std_dev': numeric_series.std()}
                 col_profile['metrics'] = {key: float(value) for key, value in metrics.items()}
