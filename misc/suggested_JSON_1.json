@@ -1,0 +1,437 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "dataset_name": "financial_accounts_profile",
+    "description": "Comprehensive schema for generating synthetic financial account data",
+    "source_sample_size": 20,
+    "last_updated": "2025-01-01"
+  },
+  
+  "global_config": {
+    "default_row_count": 20,
+    "scaling_factor": 1.0,
+    "random_seed": null,
+    "output_format": "flat_file",
+    "validation_enabled": true
+  },
+
+  "field_definitions": {
+    "ACCOUNT_NUMBER": {
+      "type": "primary_key",
+      "data_type": "numeric_string",
+      "storage_format": {
+        "length": 9,
+        "padding": "zero_left",
+        "pattern": "^[0-9]{9}$"
+      },
+      "generation": {
+        "method": "sequential_unique",
+        "range": {
+          "min": 10000001,
+          "max": 99999999
+        },
+        "uniqueness_constraint": true
+      },
+      "sample_stats": {
+        "min": 10000001,
+        "max": 10000020,
+        "mean": 10000010.5,
+        "std": 5.916
+      }
+    },
+
+    "CLIENT_ID": {
+      "type": "foreign_key",
+      "data_type": "numeric_string",
+      "storage_format": {
+        "length": 11,
+        "padding": "zero_left",
+        "pattern": "^[0-9]{11}$"
+      },
+      "generation": {
+        "method": "pool_sampling",
+        "pool_size_ratio": 0.5,
+        "prefix_pattern": "099",
+        "distribution": {
+          "type": "poisson_capped",
+          "lambda": 2,
+          "min_accounts_per_client": 1,
+          "max_accounts_per_client": 5
+        }
+      },
+      "sample_stats": {
+        "unique_percentage": 0.5,
+        "min": 9900000001,
+        "max": 9900000010,
+        "accounts_per_client_avg": 2.0
+      }
+    },
+
+    "PROD_TYPE_CODE": {
+      "type": "categorical",
+      "data_type": "string",
+      "storage_format": {
+        "length": 3,
+        "padding": "zero_left"
+      },
+      "generation": {
+        "method": "categorical_uniform",
+        "values": ["011", "022", "033", "044", "055"],
+        "weights": [0.2, 0.2, 0.2, 0.2, 0.2]
+      },
+      "business_rules": {
+        "parent_of": ["SUB_PROD_CODE"]
+      }
+    },
+
+    "SUB_PROD_CODE": {
+      "type": "categorical_dependent",
+      "data_type": "string",
+      "storage_format": {
+        "length": 4,
+        "pattern": "^[0-9]{4}$"
+      },
+      "generation": {
+        "method": "conditional_categorical",
+        "dependency": {
+          "parent_field": "PROD_TYPE_CODE",
+          "mapping": {
+            "011": {"suffixes": ["1", "2"], "weights": [0.5, 0.5]},
+            "022": {"suffixes": ["1", "2"], "weights": [0.5, 0.5]},
+            "033": {"suffixes": ["1", "2"], "weights": [0.5, 0.5]},
+            "044": {"suffixes": ["1", "2"], "weights": [0.5, 0.5]},
+            "055": {"suffixes": ["1", "2"], "weights": [0.5, 0.5]}
+          }
+        }
+      },
+      "validation_rules": [
+        {
+          "rule": "prefix_match",
+          "description": "First 3 digits must match PROD_TYPE_CODE"
+        }
+      ]
+    },
+
+    "AVAILABLE_BALANCE": {
+      "type": "monetary",
+      "data_type": "numeric",
+      "storage_format": {
+        "spec": "S9(7)V99",
+        "length": 9,
+        "decimal_places": 2,
+        "encoding": "implied_decimal_integer"
+      },
+      "generation": {
+        "method": "log_normal",
+        "parameters": {
+          "target_mean": 76200.025,
+          "target_std": 63473.63,
+          "min_value": 10000.50,
+          "max_value": 250000.00
+        },
+        "alternative_method": {
+          "type": "truncated_normal",
+          "mu": 76200.025,
+          "sigma": 63473.63
+        }
+      },
+      "sample_stats": {
+        "min": 10000.50,
+        "max": 250000.00,
+        "mean": 76200.025,
+        "std": 63473.63,
+        "distribution_type": "right_skewed"
+      },
+      "conditional_rules": {
+        "currency_adjustment": {
+          "condition": "CURRENCY_CODE != 'SGD'",
+          "adjustment": "multiply_by_factor",
+          "factor": 1.1
+        }
+      }
+    },
+
+    "CURRENCY_CODE": {
+      "type": "categorical",
+      "data_type": "string",
+      "storage_format": {
+        "length": 3,
+        "case": "upper"
+      },
+      "generation": {
+        "method": "weighted_categorical",
+        "values": ["SGD", "USD", "EUR"],
+        "weights": [0.80, 0.10, 0.10]
+      },
+      "business_rules": {
+        "primary_currency": "SGD",
+        "foreign_currency_products": ["044", "055"]
+      }
+    },
+
+    "PAYMENT_DUE_DATE": {
+      "type": "date",
+      "data_type": "date_string",
+      "storage_format": {
+        "format": "YYYYMMDD",
+        "length": 8
+      },
+      "generation": {
+        "method": "uniform_date_range",
+        "date_range": {
+          "start": "2025-11-27",
+          "end": "2025-12-17"
+        },
+        "ensure_uniqueness": true
+      },
+      "sample_stats": {
+        "min_date": "2025-11-27",
+        "max_date": "2025-12-17",
+        "unique_percentage": 1.0
+      }
+    },
+
+    "INTEREST_RATE": {
+      "type": "rate",
+      "data_type": "numeric",
+      "storage_format": {
+        "spec": "S9(3)V99(4)",
+        "length": 7,
+        "integer_digits": 3,
+        "decimal_places": 4,
+        "encoding": "implied_decimal_concatenated"
+      },
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": 50.0,
+          "sigma": 30.93,
+          "min_value": 1.2345,
+          "max_value": 90.1234
+        },
+        "alternative_method": {
+          "type": "product_conditional_mixture",
+          "low_rate_products": ["011", "022"],
+          "high_rate_products": ["033", "044", "055"],
+          "low_rate_params": {"mu": 7.5, "sigma": 5.0},
+          "high_rate_params": {"mu": 65.0, "sigma": 25.0}
+        }
+      },
+      "sample_stats": {
+        "min": 1.2345,
+        "max": 90.1234,
+        "mean": 50.0,
+        "std": 30.93
+      }
+    }
+  },
+
+  "relationships": {
+    "primary_keys": {
+      "ACCOUNT_NUMBER": {
+        "uniqueness": "required",
+        "generation_order": 1
+      }
+    },
+    "foreign_keys": {
+      "CLIENT_ID": {
+        "relationship_type": "many_to_one",
+        "average_multiplicity": 2.0,
+        "generation_order": 2
+      }
+    },
+    "dependencies": {
+      "SUB_PROD_CODE": {
+        "depends_on": ["PROD_TYPE_CODE"],
+        "dependency_type": "deterministic_prefix",
+        "generation_order": 4
+      }
+    }
+  },
+
+  "business_rules": {
+    "deterministic": [
+      {
+        "rule_id": "sub_product_prefix",
+        "description": "SUB_PROD_CODE must start with PROD_TYPE_CODE",
+        "validation": "SUB_PROD_CODE[:3] == PROD_TYPE_CODE",
+        "enforcement": "required"
+      },
+      {
+        "rule_id": "account_uniqueness",
+        "description": "ACCOUNT_NUMBER must be unique",
+        "validation": "unique(ACCOUNT_NUMBER)",
+        "enforcement": "required"
+      },
+      {
+        "rule_id": "date_validity",
+        "description": "PAYMENT_DUE_DATE must be valid calendar date",
+        "validation": "valid_date(PAYMENT_DUE_DATE)",
+        "enforcement": "required"
+      }
+    ],
+    "probabilistic": [
+      {
+        "rule_id": "client_account_multiplicity",
+        "description": "Average 2 accounts per client",
+        "implementation": "poisson_allocation",
+        "enforcement": "recommended"
+      },
+      {
+        "rule_id": "currency_skew",
+        "description": "SGD dominates with 80% share",
+        "implementation": "weighted_sampling",
+        "enforcement": "recommended"
+      },
+      {
+        "rule_id": "product_rate_correlation",
+        "description": "Interest rates may vary by product type",
+        "implementation": "conditional_distribution",
+        "enforcement": "optional"
+      }
+    ]
+  },
+
+  "generation_strategy": {
+    "phases": [
+      {
+        "phase": 1,
+        "name": "key_generation",
+        "fields": ["ACCOUNT_NUMBER", "CLIENT_ID"],
+        "description": "Generate primary and foreign keys first"
+      },
+      {
+        "phase": 2,
+        "name": "product_hierarchy",
+        "fields": ["PROD_TYPE_CODE", "SUB_PROD_CODE"],
+        "description": "Generate product codes with dependency"
+      },
+      {
+        "phase": 3,
+        "name": "independent_categoricals",
+        "fields": ["CURRENCY_CODE"],
+        "description": "Generate independent categorical fields"
+      },
+      {
+        "phase": 4,
+        "name": "numeric_fields",
+        "fields": ["AVAILABLE_BALANCE", "INTEREST_RATE", "PAYMENT_DUE_DATE"],
+        "description": "Generate numeric and date fields"
+      }
+    ],
+    "parallelization": {
+      "enabled": true,
+      "parallel_phases": [3, 4],
+      "sequential_phases": [1, 2]
+    }
+  },
+
+  "quality_controls": {
+    "validation_tests": [
+      {
+        "test_name": "field_format_compliance",
+        "description": "Verify all fields match storage format specifications",
+        "critical": true
+      },
+      {
+        "test_name": "business_rule_compliance",
+        "description": "Verify deterministic business rules",
+        "critical": true
+      },
+      {
+        "test_name": "statistical_distribution_match",
+        "description": "Compare generated vs target distributions",
+        "critical": false,
+        "tolerance": 0.1
+      },
+      {
+        "test_name": "relationship_integrity",
+        "description": "Verify key relationships and dependencies",
+        "critical": true
+      }
+    ],
+    "edge_case_handling": [
+      {
+        "scenario": "interest_rate_overflow",
+        "description": "Cap interest rate to prevent format overflow",
+        "action": "clamp_to_max_999.9999"
+      },
+      {
+        "scenario": "balance_overflow", 
+        "description": "Ensure balance fits in S9(7) format",
+        "action": "clamp_to_max_9999999.99"
+      },
+      {
+        "scenario": "date_uniqueness_exhaustion",
+        "description": "Handle case when unique dates exhausted",
+        "action": "extend_date_range_proportionally"
+      }
+    ]
+  },
+
+  "scaling_configuration": {
+    "scaling_rules": {
+      "maintain_ratios": true,
+      "client_pool_ratio": 0.5,
+      "product_distribution": "preserve",
+      "currency_distribution": "preserve"
+    },
+    "performance_optimizations": {
+      "batch_size": 1000,
+      "memory_management": "chunked_generation",
+      "caching": {
+        "client_pool": true,
+        "product_mappings": true
+      }
+    }
+  },
+
+  "output_specification": {
+    "formats": {
+      "flat_file": {
+        "field_separator": "fixed_width",
+        "record_separator": "newline",
+        "header_included": false
+      },
+      "csv": {
+        "delimiter": ",",
+        "quote_char": "\"",
+        "header_included": true
+      },
+      "json": {
+        "format": "array_of_objects",
+        "pretty_print": false
+      }
+    },
+    "field_order": [
+      "ACCOUNT_NUMBER",
+      "CLIENT_ID", 
+      "PROD_TYPE_CODE",
+      "SUB_PROD_CODE",
+      "AVAILABLE_BALANCE",
+      "CURRENCY_CODE",
+      "PAYMENT_DUE_DATE",
+      "INTEREST_RATE"
+    ]
+  },
+
+  "example_configurations": {
+    "small_dataset": {
+      "row_count": 100,
+      "description": "Small test dataset"
+    },
+    "medium_dataset": {
+      "row_count": 10000,
+      "client_pool_ratio": 0.3,
+      "description": "Medium production dataset with more clients per account"
+    },
+    "large_dataset": {
+      "row_count": 1000000,
+      "scaling_optimizations": {
+        "batch_processing": true,
+        "parallel_generation": true
+      },
+      "description": "Large scale production dataset"
+    }
+  }
+}

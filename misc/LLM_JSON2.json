@@ -1,0 +1,296 @@
+{
+  "global_config": {
+    "default_row_count": 40000,
+    "scaling_factor": 1,
+    "random_seed": 20250928
+  },
+  "fields": [
+    {
+      "name": "ACCOUNT_NUMBER",
+      "description": "Unique account numbers (primary key). Stored per spec S9(9) as a 9-digit zero-padded numeric string.",
+      "original_spec": "S9(9)",
+      "generation_order": 1,
+      "generation": {
+        "method": "sequential_unique_id",
+        "parameters": {
+          "prefix": "01",
+          "start_value": 10000001,
+          "length": 9,
+          "unique": true,
+          "step": 1,
+          "encoding_notes": "format integer as zero-padded string width=9 (examples: '010000001','010000040'). Numeric domain observed [10000001,10000040]."
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "CLIENT_ID",
+      "description": "Client identifier; many accounts map to same client. Stored per spec S9(11) as 11-digit zero-padded numeric string.",
+      "original_spec": "S9(11)",
+      "generation_order": 2,
+      "generation": {
+        "method": "foreign_key_pool",
+        "parameters": {
+          "pool_size_ratio": 0.4,
+          "prefix": "099",
+          "start_value": 9900000001,
+          "length": 11,
+          "distribution": "poisson_allocation",
+          "distribution_params": {
+            "lambda": 2
+          },
+          "distinct_values_observed": 16,
+          "encoding_notes": "create pool_size = round(default_row_count * pool_size_ratio) distinct CLIENT_IDs (observed 16 for 40 rows). Generate pool values in range starting at start_value; format as zero-padded width=11 (e.g. '09900000001'). Assign accounts to CLIENT_IDs using Poisson(lambda=2) truncated >=1 then adjust to match exact row count; ensures some clients have multiple accounts."
+        }
+      },
+      "dependencies": [
+        {
+          "field": "ACCOUNT_NUMBER",
+          "rule": "many-to-one mapping: multiple ACCOUNT_NUMBER rows reference a CLIENT_ID from the generated pool"
+        }
+      ]
+    },
+    {
+      "name": "PROD_TYPE_CODE",
+      "description": "Product type code indicating specific product of account. Categorical S9(3).",
+      "original_spec": "S9(3)",
+      "generation_order": 3,
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "",
+          "mappings": {
+            "default": {
+              "values": [
+                "011",
+                "044",
+                "055",
+                "022",
+                "033"
+              ],
+              "weights": [
+                0.4,
+                0.2,
+                0.2,
+                0.1,
+                0.1
+              ],
+              "observed_counts": [
+                16,
+                8,
+                8,
+                4,
+                4
+              ]
+            }
+          },
+          "encoding_notes": "3-digit string codes; preserve leading zeros. Use observed empirical probabilities: 011=40%, 044=20%, 055=20%, 022=10%, 033=10% (based on 40-row sample)."
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "SUB_PROD_CODE",
+      "description": "Sub-product code; inferred dependent on PROD_TYPE_CODE. First three digits match PROD_TYPE_CODE, fourth digit is sub-type suffix. S9(4).",
+      "original_spec": "S9(4)",
+      "generation_order": 4,
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "PROD_TYPE_CODE",
+          "mappings": {
+            "011": {
+              "values": [
+                "0111",
+                "0112"
+              ],
+              "weights": [
+                0.75,
+                0.25
+              ],
+              "observed_counts": [
+                12,
+                4
+              ]
+            },
+            "022": {
+              "values": [
+                "0222"
+              ],
+              "weights": [
+                1
+              ],
+              "observed_counts": [
+                4
+              ]
+            },
+            "033": {
+              "values": [
+                "0332"
+              ],
+              "weights": [
+                1
+              ],
+              "observed_counts": [
+                4
+              ]
+            },
+            "044": {
+              "values": [
+                "0441",
+                "0442"
+              ],
+              "weights": [
+                0.5,
+                0.5
+              ],
+              "observed_counts": [
+                4,
+                4
+              ]
+            },
+            "055": {
+              "values": [
+                "0551",
+                "0552"
+              ],
+              "weights": [
+                0.5,
+                0.5
+              ],
+              "observed_counts": [
+                4,
+                4
+              ]
+            }
+          },
+          "encoding_notes": "ensure SUB_PROD_CODE[:3] == PROD_TYPE_CODE; store as 4-digit zero-padded string. Use mapping weights to mirror sample frequencies."
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "deterministic prefix: SUB_PROD_CODE must begin with the selected PROD_TYPE_CODE; choose suffix according to mapping"
+        }
+      ]
+    },
+    {
+      "name": "AVAILABLE_BALANCE",
+      "description": "Available balance amount of specific account. S9(7)V99 (7 integer digits + 2 implied decimals), stored as 9-character zero-padded numeric string representing value*100.",
+      "original_spec": "S9(7)V99",
+      "generation_order": 5,
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": 76472.525,
+          "sigma": 62622.73,
+          "min_value": 10000.5,
+          "max_value": 250200,
+          "decimal_places": 2,
+          "encoding_notes": "generate float, round to 2 decimal places, multiply by 100 to get integer cents, then format as zero-padded string width=9 (examples from sample: '001230000' -> 12300.00? verify encoding; use observed sample mapping convention: '004000000' = 40000.00, '001000050' = 1000.50). If skew is stronger, consider log-normal with fitted parameters to match mean/std."
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "optional bucketization: bias balance sampling by PROD_TYPE_CODE (recommended): e.g., PROD 011 -> lower balances, 044/055 -> higher balances"
+        },
+        {
+          "field": "CURRENCY_CODE",
+          "rule": "optional scaling: non-SGD currencies may have adjusted balance distribution"
+        }
+      ]
+    },
+    {
+      "name": "CURRENCY_CODE",
+      "description": "Currency of the account. X(3) categorical; heavily skewed to SGD in sample.",
+      "original_spec": "X(3)",
+      "generation_order": 6,
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "PROD_TYPE_CODE",
+          "mappings": {
+            "default": {
+              "values": [
+                "SGD",
+                "USD",
+                "EUR"
+              ],
+              "weights": [
+                0.8,
+                0.1,
+                0.1
+              ],
+              "observed_counts": [
+                32,
+                4,
+                4
+              ]
+            },
+            "055": {
+              "values": [
+                "SGD",
+                "USD",
+                "EUR"
+              ],
+              "weights": [
+                0.5,
+                0.25,
+                0.25
+              ],
+              "note": "heuristic: product 055 shows slightly higher chance of USD/EUR in inferred rule (optional)"
+            }
+          },
+          "encoding_notes": "3-letter currency codes. Default empirical probabilities: SGD 80%, USD 10%, EUR 10%."
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "probabilistic dependency: PROD_TYPE_CODE may influence currency distribution (optional heuristic)"
+        }
+      ]
+    },
+    {
+      "name": "PAYMENT_DUE_DATE",
+      "description": "Date by when the payment to account needs to be made. Stored as 8-digit YYYYMMDD per S9(8).",
+      "original_spec": "S9(8)",
+      "generation_order": 7,
+      "generation": {
+        "method": "uniform_date_range",
+        "parameters": {
+          "start_date": "2025-11-27",
+          "end_date": "2025-12-17",
+          "length": 8,
+          "unique": false,
+          "encoding_notes": "generate dates uniformly between inclusive bounds; format as YYYYMMDD. Observed metrics: min=20251127 max=20251217; sample unique_count=20 for 40 rows (dates can repeat). Set unique=false when default_row_count > available days."
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "INTEREST_RATE",
+      "description": "Current effective interest rate of account. S9(3)V99(4) stored as 7-digit string: 3 integer digits + 4 decimal digits concatenated.",
+      "original_spec": "S9(3)V99(4)",
+      "generation_order": 8,
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": 49.88995,
+          "sigma": 30.51878,
+          "min_value": 1.3345,
+          "max_value": 90.4234,
+          "decimal_places": 4,
+          "encoding_notes": "generate float, round to 4 decimals. Extract integer part (pad to 3 digits) and fractional part (4 digits), then concatenate as 7-digit string (e.g. 1.3345 -> '0013345', 78.7012 -> '0787012'). Clamp to [min_value,max_value]. Consider mixture components for low-rate vs high-rate accounts for realism."
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "optional dependency: interest rate distribution can be adjusted by product type (e.g., product 011 may have lower typical rates)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,393 @@
+Nice — I’ll act as your data analyst and produce a precise, actionable set of synthetic-data generation rules that mirror the original flat-file profile and its inter-attribute relationships. I’ve organized the output so you can implement it directly in a generator (SQL, Python, Faker, SDV, etc.).
+
+---
+
+# Quick summary (top-level facts)
+
+* Rows in sample: 20
+* Primary key: **ACCOUNT_NUMBER** (unique 100%, length 9, zero-padded numeric string).
+* Natural foreign / grouping key: **CLIENT_ID** (10 unique values across 20 rows → on average 2 accounts per client).
+* Product hierarchy: **PROD_TYPE_CODE** (5 categories) → **SUB_PROD_CODE** (SUB_PROD prefix ties to PROD_TYPE_CODE).
+* Major currencies: **SGD (80%)**, **USD (10%)**, **EUR (10%)**.
+* Dates are YYYYMMDD, in a compact 8-digit field; Payment Due Dates in dataset span **2025-11-27** → **2025-12-17**.
+* Monetary and rate fields are fixed-width, implied decimals (see Formatting Rules).
+
+---
+
+# 1) Primary & Foreign Key rules
+
+**Primary Key**
+
+* `ACCOUNT_NUMBER`
+
+  * Unique: **100%**
+  * Type: numeric identifier stored as zero-padded string of length **9**.
+  * Numeric value range (from metrics): **10,000,001 → 10,000,020** in sample.
+  * Generation rule: produce unique integers within a desired range and render as 9-digit zero-padded strings (e.g., `str(id).zfill(9)`).
+  * Suggested generator behaviour: sequential or uniformly sampled unique ints in the chosen range (sequential preserves realistic account numbering).
+
+**Foreign / Grouping Key**
+
+* `CLIENT_ID`
+
+  * Unique percentage: **50%** (10 distinct client IDs for 20 rows) → therefore many-to-one mapping: many accounts per client.
+  * Type: numeric identifier stored as zero-padded string of length **11** (sample prefix `099` visible).
+  * Generation rule: create a client pool of **N_clients** (default N_clients = total_rows / 2 unless user wants different sparsity). For 20 rows use 10 unique CLIENT_IDs each assigned ~2 accounts.
+  * Distribution across accounts: reproduce roughly 2 accounts per client (but allow variance: some clients 1 account, some 3). Use a small multinomial or Poisson (λ≈2) to allocate counts across the client pool.
+
+**Enforcement**
+
+* When generating accounts, pick/assign `CLIENT_ID` from the pre-generated pool according to the target duplication distribution. Ensure at least one client has >1 account to reproduce duplication.
+
+---
+
+# 2) Parent–Child relationships (field dependencies & likely mapping)
+
+**Rule A — Product → Sub-product**
+
+* `PROD_TYPE_CODE` → `SUB_PROD_CODE`
+
+  * `PROD_TYPE_CODE` is 3 digits (enum: `011,022,033,044,055`).
+  * `SUB_PROD_CODE` is 4 characters and the **first three digits are the PROD_TYPE_CODE** (observed examples: `0331` for `033`, `0221` for `022`, `0111` for `011`, `0551` for `055`, etc.).
+  * Generation rule: For a given row, generate `PROD_TYPE_CODE` first, then generate `SUB_PROD_CODE` by concatenating the 3-digit product code with a 1-digit sub-code suffix (see Sub-product suffix list below). Example: `PROD_TYPE_CODE = '022'` → `SUB_PROD_CODE` ∈ `{'0221','0222',...}`.
+
+**Sub-product suffix cardinality**
+
+* There are 10 unique `SUB_PROD_CODE` values across 5 product types → avg 2 sub-products per product.
+* Suggested allowed suffixes per product (implement as default; you can tune):
+
+  * `011` → `0111`, `0112`
+  * `022` → `0221`, `0222`
+  * `033` → `0331`, `0332`
+  * `044` → `0441`, `0442`
+  * `055` → `0551`, `0552`
+* Frequencies: If you want to match observed balance of sub-products, use roughly equal probability across the known suffixes per product (or sample weights if you have observed counts).
+
+**Rule B — No other direct parent-child inferred**
+
+* Nothing else in the JSON shows a clear deterministic dependency (e.g., currency is not deterministically fixed by product in the supplied stats). Where we do propose conditional rules below, those are probabilistic/heuristic (inferred business rules) rather than strict deterministic keys.
+
+---
+
+# 3) Data distributions & generation strategy (numeric fields)
+
+For each numeric/continuous field below I recommend a specific generative approach (distribution family + parameter handling). Always respect field formatting (see section 6).
+
+**ACCOUNT_NUMBER (numeric underlying)**
+
+* Observed metrics: min=10000001, max=10000020, mean=10000010.5, std=~5.916
+* Generation strategy:
+
+  * Use **sequential** integers or **unique uniform** sampling across the intended range for uniqueness.
+  * If you want to scale up: keep the same leading pattern `01` and expand range while preserving zero-pad length 9.
+  * Ensure uniqueness constraint.
+
+**CLIENT_ID (numeric underlying)**
+
+* Observed metrics: min=9900000001, max=9900000010, mean ~9900000005.5
+* Generation strategy:
+
+  * Pre-generate a pool of N distinct client IDs (default N = total_rows × 0.5).
+  * Values zero-padded to length 11. Use the same prefix pattern as samples (e.g., start with `099` or `990...`) if you want realistic-looking IDs (sample shows `09900000001` etc).
+  * Assignment: sample from the pool with replacement according to desired duplication distribution (multinomial or Poisson).
+
+**AVAILABLE_BALANCE** (monetary)
+
+* Observed metrics: min=10,000.50, max=250,000.00, mean≈76,200.025, std≈63,473.63
+* Field spec: `S9(7)V99` → 7 integer digits + 2 decimals (9 chars total).
+* Observed distribution: strongly right-skewed (mean > median? Actually mean 76,200 > median 67,500 suggests mild right-skew). Std is large relative to mean.
+* Generation strategy (recommended):
+
+  * Use a **log-normal** distribution (preferred for positive monetary amounts and to reproduce skew) parameterized to match observed mean & std (fit log-normal parameters from sample mean & variance), OR
+  * Simpler: generate from a **truncated normal** with μ=76,200, σ=63,473 and clip to [10,000.5, 250,000], then round to 2 decimals.
+  * Format: store as integer*100 in the fixed-width field or as zero-padded 9-char string with implied 2 decimals (see Formatting).
+  * If you want more realism: overlay business buckets (e.g., low balances 10k-30k, mid 30k-100k, high 100k+) with proportions tuned to sample.
+
+**INTEREST_RATE**
+
+* Observed metrics: min=1.2345, max=90.1234, mean≈50.0, std≈30.93
+* Field spec: `S9(3)V99(4)` → 3 integer digits + 4 decimals encoded as a 7-digit string (no explicit decimal point in storage).
+* Observed behavior: wide range and large variance; values like 1.2345 up to 90.1234 indicate possible product-specific or special-rate accounts.
+* Generation strategy:
+
+  * Use a **truncated normal** with μ=50.0 and σ=30.93, clipped to [1.2345, 90.1234], with **4** decimal places.
+  * Alternative if you want multimodality (more realistic): mixture of two normals (low-rate mode around 1–5 and higher-rate mode around 40–90) — but only do this if you want to create distinct rate classes.
+  * After sampling, format as integer string of length 7 with zero padding and implied 4 decimals (e.g., rate 1.2345 → `'0012345'`).
+
+**PAYMENT_DUE_DATE**
+
+* Observed metrics (as YYYYMMDD numeric): min=20251127, max=20251217
+* Unique: 100%
+* Generation strategy:
+
+  * Interpret as **date** (YYYY-MM-DD). Convert numeric min/max to actual calendar dates: **2025-11-27 → 2025-12-17**.
+  * Sample uniformly from that inclusive date range (or sample from a custom distribution if you want clustering around particular days).
+  * Ensure output format `YYYYMMDD` 8-digit string without separators.
+  * Enforce calendar validity (leap years, month/day correctness).
+
+---
+
+# 4) Categorical values (exact enums + frequencies)
+
+**PROD_TYPE_CODE** (length 3, categorical)
+
+* Enum values with counts (from sample):
+
+  * `"011"`: 4
+  * `"022"`: 4
+  * `"033"`: 4
+  * `"044"`: 4
+  * `"055"`: 4
+* Generation rule:
+
+  * Use **uniform categorical sampling** across these five codes (each with probability 0.2) unless you want to simulate a different mix. Preserve equal probability to match sample.
+
+**CURRENCY_CODE** (length 3, categorical)
+
+* Enum values with counts:
+
+  * `"SGD"`: 16
+  * `"USD"`: 2
+  * `"EUR"`: 2
+* Generation rule:
+
+  * Use categorical sampling with probabilities: `SGD=0.80, USD=0.10, EUR=0.10`.
+  * If scaling dataset, keep the same skew (or parameterize it).
+
+**SUB_PROD_CODE**
+
+* Technically not flagged as categorical in JSON, but it’s a small discrete set of values (unique_count=10).
+* Generation rule (see Parent–Child): generate from allowed sub-product suffixes per product.
+
+---
+
+# 5) Conditional logic & inferred business rules (explicit rules you can implement)
+
+I divide these into **deterministic rules** (must-haves) and **probabilistic/business rules** (recommended to make synthetic data realistic).
+
+## Deterministic conditional rules (implement always)
+
+1. **SUB_PROD_CODE prefix rule**
+
+   * `SUB_PROD_CODE[0:3] == PROD_TYPE_CODE`
+   * Implementation: After choosing `PROD_TYPE_CODE`, `SUB_PROD_CODE = PROD_TYPE_CODE + sub_suffix` where `sub_suffix` is drawn from the allowed suffix list for that product.
+
+2. **Unique accounts per ACCOUNT_NUMBER**
+
+   * `ACCOUNT_NUMBER` must be unique across the dataset.
+
+3. **Date validity**
+
+   * `PAYMENT_DUE_DATE` must be a valid date within the configured min/max bounds; format `YYYYMMDD`.
+
+## Probabilistic / business rules (implement to mimic behavior)
+
+1. **Client-to-account multiplicity**
+
+   * Average ~2 accounts per client. Implementation: generate client pool of size `N_clients = round(total_rows * 0.5)`, allocate account counts via Poisson(λ=2) or small multinomial to assign accounts to clients.
+
+2. **Currency skew**
+
+   * `CURRENCY_CODE` heavily favors `SGD`. Use the observed probabilities. Optionally tie USD/EUR to particular product types (heuristic):
+
+     * If you want more realism, you can implement: for `PROD_TYPE_CODE` in `{055,044}` slightly higher probability of USD/EUR (but this is optional — not strictly supported by the sample because sample is too small to be certain).
+
+3. **Interest rate heterogeneity**
+
+   * Consider making `INTEREST_RATE` partially dependent on `PROD_TYPE_CODE`. Example heuristic:
+
+     * For `PROD_TYPE_CODE` `011` and `022` (assume retail products) sample rates from a **lower-rate** distribution (e.g., truncated normal mean ~5–15).
+     * For `033`, `044`, `055` sample from **wider/higher** distributions (mean ~40–70).
+   * This is a suggested enhancement to better mimic the observed broad rate spread — implement only if you want product-linked rate patterns.
+
+4. **Balance buckets by product**
+
+   * Optionally assign `AVAILABLE_BALANCE` distributions by `PROD_TYPE_CODE`:
+
+     * `011`, `022` → lower balances (10k–80k),
+     * `033`, `044` → medium balances (30k–150k),
+     * `055` → possibly higher balances (50k–250k).
+   * This is a heuristic suggestion — adapt if you have domain knowledge.
+
+5. **Low frequency of USD/EUR**
+
+   * When `CURRENCY_CODE` != `SGD`, you may optionally raise the `AVAILABLE_BALANCE` mean slightly (accounts in foreign currency may correspond to specific account types). Again, optional.
+
+---
+
+# 6) Formatting rules (exact storage formats to match flat-file spec)
+
+**ACCOUNT_NUMBER**
+
+* Stored as 9 characters: zero-padded integer string: e.g., `010000010`.
+* When generating, ensure the numeric value is in the intended numeric range and then `format = str(value).zfill(9)`.
+
+**CLIENT_ID**
+
+* Stored as 11 characters: zero-padded integer string. Sample prefix uses `099` or `0990...`.
+* Use `str(value).zfill(11)`.
+
+**PROD_TYPE_CODE**
+
+* Stored as 3 characters, digits, e.g., `'011'`. Keep leading zeros.
+
+**SUB_PROD_CODE**
+
+* Stored as 4 characters, digits, e.g., `'0331'`. First three characters match `PROD_TYPE_CODE`.
+
+**AVAILABLE_BALANCE**
+
+* Field spec `S9(7)V99` → total **9** characters: 7 integer digits + 2 decimals (implied).
+* Storage format: produce numeric with 2 decimals then convert to integer cents and zero-pad to width 9. Example:
+
+  * Balance `40000.00` → integer 4,000,000 (cents) → string `'004000000'`.
+  * Balance `1000.50` → `'001000050'`.
+* When rounding: round to 2 decimal places BEFORE encoding.
+
+**INTEREST_RATE**
+
+* Field spec `S9(3)V99(4)` → 3 integer digits + 4 decimals stored as 7 digit string (implied decimal).
+* Storage format: Example: `1.2345` → `'0012345'`; `90.1234` → `'901234'`? (careful with digit counts) — correct mapping: take integer part padded to width 3 and 4 decimals, then concatenate:
+
+  * Numeric rate `1.2345` → integer part `001`, decimal `2345` → `'0012345'` (7 chars).
+  * Numeric rate `90.1234` → integer part `090`, decimal `1234` → `'0901234'`.
+* Implementation: `rate_int = int(floor(rate))`; `rate_frac = int(round((rate - rate_int) * 10_000))`; `encoded = f"{rate_int:03d}{rate_frac:04d}"`.
+
+**PAYMENT_DUE_DATE**
+
+* 8-digit `YYYYMMDD` string, no separators, zero-padded where needed.
+* Implementation: `date.strftime("%Y%m%d")`.
+
+---
+
+# 7) Exact generation recipe (pseudocode / step-by-step)
+
+Below is a sample generator recipe you can implement in Python / SQL / data synth tool.
+
+1. **Set row_count = N** (default N=20 to mimic sample; scale as needed).
+2. **Generate CLIENT_ID pool**
+
+   * `N_clients = round(row_count * 0.5)` (default).
+   * Generate unique client numeric IDs in an appropriate range (e.g., 9900000001 -> 99000000xx) and format `zfill(11)`.
+3. **Allocate account counts to clients**
+
+   * Use Poisson(λ=2) truncated to ≥1, then adjust to sum to row_count; or use multinomial so that average ≈2.
+4. **Generate ACCOUNT_NUMBER**
+
+   * Create `row_count` unique integers in a contiguous block (e.g., starting at 10000001) or sample without replacement from a larger range.
+   * Format each as `str(account_num).zfill(9)`.
+5. **Assign CLIENT_ID to each ACCOUNT_NUMBER** according to allocations from step 3.
+6. **Generate PROD_TYPE_CODE per row**
+
+   * Sample uniformly from `['011','022','033','044','055']`.
+7. **Generate SUB_PROD_CODE per row**
+
+   * Pick a suffix from the allowed suffix list for the chosen product, e.g., `['1','2']` (use weights if desired).
+   * SUB_PROD = PROD_TYPE_CODE + suffix (4-char string).
+8. **Generate CURRENCY_CODE per row**
+
+   * Sample categorical with probabilities {SGD:0.8, USD:0.1, EUR:0.1}.
+9. **Generate AVAILABLE_BALANCE per row**
+
+   * Option A (recommended): Sample from **log-normal** (fit to mean/std), or
+   * Option B (easier): truncated normal N(μ=76200, σ=63473) clipped to [10000.5, 250000].
+   * Round to 2 decimals; encode as cents and format zero-padded width=9.
+10. **Generate INTEREST_RATE per row**
+
+    * Option A: single truncated normal on [1.2345, 90.1234] with μ=50, σ=30.93; round to 4 decimals.
+    * Option B (more realistic): conditional by product (low/higher distribution). After numeric value computed, encode as 7-digit string `"{int_part:03d}{frac4:04d}"`.
+11. **Generate PAYMENT_DUE_DATE per row**
+
+    * Sample uniformly from date range `2025-11-27` to `2025-12-17` inclusive.
+    * Format as `YYYYMMDD` (string).
+12. **Post-checks**
+
+    * Ensure `ACCOUNT_NUMBER` uniqueness.
+    * Validate `SUB_PROD_CODE` prefix == `PROD_TYPE_CODE`.
+    * Validate field lengths and zero-padding of each field.
+    * Validate `AVAILABLE_BALANCE` and `INTEREST_RATE` numeric ranges.
+
+---
+
+# 8) Frequency tables (ready to feed a generator)
+
+**PROD_TYPE_CODE**
+
+* `011` (20%)
+* `022` (20%)
+* `033` (20%)
+* `044` (20%)
+* `055` (20%)
+
+**CURRENCY_CODE**
+
+* `SGD` (80%)
+* `USD` (10%)
+* `EUR` (10%)
+
+**SUB_PROD_CODE (suggested canonical list based on samples & inferred pattern)**
+
+* `0111`, `0112`
+* `0221`, `0222`
+* `0331`, `0332`
+* `0441`, `0442`
+* `0551`, `0552`
+  (If you prefer exact matching to sample, reduce list to the ones observed: `0331,0332,0221,0441,0222,0551,0111` and set frequencies accordingly.)
+
+---
+
+# 9) Edge cases, constraints and validation tests to add
+
+* **Edge case: INTEREST_RATE fractional rounding** — ensure fractional part uses exactly 4 decimals; rounding should not create integer part > 999 (outside 3-digit integer capacity). If rate generation could exceed 999, cap/clamp to 999.9999 (but sample max is 90.1234 so safe).
+* **Edge case: AVAILABLE_BALANCE overflow** — `S9(7)` integer portion supports up to 9,999,999 (i.e., 9,999,999.99 technically), ensure synthetic balances are within allowed spec; our sample max 250,000 is safe.
+* **Uniqueness test** — verify `ACCOUNT_NUMBER` uniqueness; also check `PAYMENT_DUE_DATE` uniqueness if you wish to match sample’s 100% uniqueness (but uniqueness of date in real data is unlikely — sample had 20 unique dates).
+* **Consistency checks** — for each row, check `len(field_string) == spec_length` and `field_string.isdigit()` where appropriate.
+
+---
+
+# 10) Example synthetic row (shows encoding)
+
+Given:
+
+* account_num = 10000021 → `'010000021'` (9 chars)
+* client_id = 9900000011 → `'09900000011'` (11 chars)
+* prod_type = `'033'`
+* sub_prod = `'0332'`
+* balance = 125000.75 → cents = 12,500,075 → `'012500075'` (9 chars)
+* currency = `'SGD'`
+* payment_due = 2025-12-01 → `'20251201'`
+* interest_rate = 2.5000 → integer part `002` fractional `5000` → `'0025000'` (7 chars)
+
+Final flat-file fields (strings):
+
+```
+ACCOUNT_NUMBER='010000021'
+CLIENT_ID='09900000011'
+PROD_TYPE_CODE='033'
+SUB_PROD_CODE='0332'
+AVAILABLE_BALANCE='012500075'
+CURRENCY_CODE='SGD'
+PAYMENT_DUE_DATE='20251201'
+INTEREST_RATE='0025000'
+```
+
+---
+
+# 11) Implementation tips & quick tests
+
+* **Unit tests**:
+
+  * test that `SUB_PROD_CODE[:3] == PROD_TYPE_CODE` for all rows.
+  * test `ACCOUNT_NUMBER` uniqueness.
+  * test that `len(AVAILABLE_BALANCE)==9` and when interpreted as cents/100 yields value within [10000.50, 250000.00].
+  * test `len(INTEREST_RATE)==7` and proper decoding gives float with 4 decimals.
+  * test date parsing on `PAYMENT_DUE_DATE`.
+* **Scaling**:
+
+  * When scaling beyond 20 rows, keep the same ratios: product uniform, currency 80/10/10, client_pool ≈ 50% distinct of row_count.
+* **Parameterisation**:
+
+  * Expose seed for random generator to reproduce datasets.
+  * Expose overrides for product→rate and product→balance mapping if domain knowledge becomes available.
+
+---

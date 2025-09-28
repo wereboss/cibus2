@@ -1,0 +1,373 @@
+{
+  "schema_meta": {
+    "version": "2.0",
+    "type": "data_generation_profile",
+    "description": "Generic, scalable schema for synthetic data generation",
+    "generator_compatibility": ["faker", "sdv", "gretel", "custom"]
+  },
+
+  "dataset_config": {
+    "target_rows": null,
+    "random_seed": null,
+    "preserve_relationships": true,
+    "maintain_statistical_properties": true
+  },
+
+  "fields": {
+    "ACCOUNT_NUMBER": {
+      "category": "identifier",
+      "role": "primary_key",
+      "data_type": "string",
+      "constraints": {
+        "uniqueness": "required",
+        "format": {
+          "pattern": "numeric",
+          "length": 9,
+          "padding": "leading_zeros"
+        }
+      },
+      "generation": {
+        "strategy": "sequential_unique",
+        "parameters": {
+          "start_offset": 0,
+          "increment": 1
+        }
+      }
+    },
+
+    "CLIENT_ID": {
+      "category": "identifier", 
+      "role": "foreign_key",
+      "data_type": "string",
+      "constraints": {
+        "format": {
+          "pattern": "numeric",
+          "length": 11,
+          "padding": "leading_zeros"
+        }
+      },
+      "generation": {
+        "strategy": "pool_reference",
+        "parameters": {
+          "pool_size_method": "ratio",
+          "pool_ratio": 0.5,
+          "allocation_distribution": {
+            "type": "poisson",
+            "lambda": 2,
+            "min_refs": 1
+          }
+        }
+      }
+    },
+
+    "PROD_TYPE_CODE": {
+      "category": "categorical",
+      "role": "dimension",
+      "data_type": "string",
+      "constraints": {
+        "format": {
+          "length": 3,
+          "padding": "leading_zeros"
+        }
+      },
+      "generation": {
+        "strategy": "categorical",
+        "parameters": {
+          "distribution": "uniform",
+          "cardinality": 5,
+          "value_template": "{index:03d}1"
+        }
+      },
+      "relationships": {
+        "drives": ["SUB_PROD_CODE"]
+      }
+    },
+
+    "SUB_PROD_CODE": {
+      "category": "categorical",
+      "role": "dimension_child", 
+      "data_type": "string",
+      "constraints": {
+        "format": {
+          "length": 4
+        },
+        "derivation": {
+          "parent_field": "PROD_TYPE_CODE",
+          "rule": "prefix_match",
+          "prefix_length": 3
+        }
+      },
+      "generation": {
+        "strategy": "conditional_categorical",
+        "parameters": {
+          "depends_on": "PROD_TYPE_CODE",
+          "suffix_options": 2,
+          "suffix_distribution": "uniform"
+        }
+      }
+    },
+
+    "AVAILABLE_BALANCE": {
+      "category": "numerical",
+      "role": "measure",
+      "data_type": "decimal",
+      "constraints": {
+        "format": {
+          "storage_spec": "S9(7)V99",
+          "total_digits": 9,
+          "decimal_places": 2,
+          "encoding": "fixed_point_integer"
+        },
+        "domain": {
+          "min_value": 1000.00,
+          "positive_only": true
+        }
+      },
+      "generation": {
+        "strategy": "statistical_distribution",
+        "parameters": {
+          "primary_method": {
+            "type": "lognormal",
+            "fit_to_sample": true
+          },
+          "fallback_method": {
+            "type": "truncated_normal",
+            "percentile_bounds": [5, 95]
+          }
+        }
+      }
+    },
+
+    "CURRENCY_CODE": {
+      "category": "categorical",
+      "role": "dimension",
+      "data_type": "string",
+      "constraints": {
+        "format": {
+          "length": 3,
+          "case": "upper"
+        },
+        "value_set": "iso_currency_codes"
+      },
+      "generation": {
+        "strategy": "weighted_categorical",
+        "parameters": {
+          "primary_weight": 0.8,
+          "distribution_method": "sample_based"
+        }
+      }
+    },
+
+    "PAYMENT_DUE_DATE": {
+      "category": "temporal",
+      "role": "measure",
+      "data_type": "date",
+      "constraints": {
+        "format": {
+          "pattern": "YYYYMMDD",
+          "length": 8
+        }
+      },
+      "generation": {
+        "strategy": "date_range",
+        "parameters": {
+          "range_method": "days_from_reference",
+          "reference_method": "sample_bounds",
+          "distribution": "uniform",
+          "uniqueness_preference": "high"
+        }
+      }
+    },
+
+    "INTEREST_RATE": {
+      "category": "numerical",
+      "role": "measure", 
+      "data_type": "decimal",
+      "constraints": {
+        "format": {
+          "storage_spec": "S9(3)V99(4)",
+          "integer_digits": 3,
+          "decimal_places": 4,
+          "encoding": "concatenated_fixed_point"
+        },
+        "domain": {
+          "min_value": 0.0001,
+          "max_value": 999.9999
+        }
+      },
+      "generation": {
+        "strategy": "statistical_distribution",
+        "parameters": {
+          "primary_method": {
+            "type": "truncated_normal",
+            "fit_to_sample": true
+          },
+          "conditional_method": {
+            "condition_field": "PROD_TYPE_CODE",
+            "type": "mixture_by_category"
+          }
+        }
+      }
+    }
+  },
+
+  "relationship_patterns": {
+    "primary_key": {
+      "type": "unique_identifier",
+      "generation_priority": 1,
+      "enforcement": "strict"
+    },
+    "foreign_key": {
+      "type": "reference_pool",
+      "generation_priority": 2,
+      "multiplicity": "many_to_one",
+      "enforcement": "referential_integrity"
+    },
+    "hierarchical_dependency": {
+      "type": "parent_child",
+      "generation_priority": 3,
+      "enforcement": "derivation_rules"
+    }
+  },
+
+  "generation_rules": {
+    "deterministic": {
+      "prefix_derivation": {
+        "description": "Child field must start with parent field value",
+        "validation": "startswith_check",
+        "enforcement_level": "required"
+      },
+      "uniqueness_constraints": {
+        "description": "Primary keys must be unique",
+        "validation": "uniqueness_check", 
+        "enforcement_level": "required"
+      },
+      "format_compliance": {
+        "description": "All fields must match format specifications",
+        "validation": "format_check",
+        "enforcement_level": "required"
+      }
+    },
+    "probabilistic": {
+      "statistical_fidelity": {
+        "description": "Generated data should match source distributions",
+        "validation": "distribution_test",
+        "enforcement_level": "recommended",
+        "tolerance": 0.15
+      },
+      "relationship_preservation": {
+        "description": "Cross-field relationships should be maintained",
+        "validation": "correlation_test",
+        "enforcement_level": "optional"
+      }
+    }
+  },
+
+  "generation_strategies": {
+    "sequential_unique": {
+      "description": "Generate sequential unique values",
+      "parameters": ["start_offset", "increment", "padding"],
+      "use_cases": ["primary_keys", "ordered_identifiers"]
+    },
+    "pool_reference": {
+      "description": "Reference values from a generated pool",
+      "parameters": ["pool_size_method", "allocation_distribution"],
+      "use_cases": ["foreign_keys", "shared_identifiers"]
+    },
+    "categorical": {
+      "description": "Sample from categorical distribution",
+      "parameters": ["distribution", "cardinality", "weights"],
+      "use_cases": ["enums", "categories", "classifications"]
+    },
+    "conditional_categorical": {
+      "description": "Categorical sampling based on other field values",
+      "parameters": ["depends_on", "mapping_rules", "fallback"],
+      "use_cases": ["hierarchical_categories", "dependent_enums"]
+    },
+    "statistical_distribution": {
+      "description": "Sample from fitted statistical distribution",
+      "parameters": ["primary_method", "fallback_method", "bounds"],
+      "use_cases": ["continuous_measures", "monetary_amounts", "rates"]
+    },
+    "weighted_categorical": {
+      "description": "Categorical with explicit weights",
+      "parameters": ["weights", "distribution_method"],
+      "use_cases": ["skewed_categories", "frequency_based_sampling"]
+    },
+    "date_range": {
+      "description": "Generate dates within specified ranges",
+      "parameters": ["range_method", "distribution", "uniqueness_preference"],
+      "use_cases": ["timestamps", "due_dates", "events"]
+    }
+  },
+
+  "format_encodings": {
+    "fixed_point_integer": {
+      "description": "Store decimal as integer with implied decimal point",
+      "implementation": "multiply_by_scale_factor"
+    },
+    "concatenated_fixed_point": {
+      "description": "Concatenate integer and fractional parts",
+      "implementation": "separate_integer_fractional_encoding"
+    },
+    "leading_zeros": {
+      "description": "Pad numeric strings with leading zeros",
+      "implementation": "zero_fill_to_width"
+    }
+  },
+
+  "validation_framework": {
+    "levels": {
+      "critical": {
+        "description": "Must pass for valid output",
+        "tests": ["format_compliance", "uniqueness_constraints", "referential_integrity"]
+      },
+      "important": {
+        "description": "Should pass for quality output", 
+        "tests": ["statistical_fidelity", "business_rules"]
+      },
+      "optional": {
+        "description": "Nice to have for realistic output",
+        "tests": ["relationship_preservation", "edge_case_handling"]
+      }
+    },
+    "test_methods": {
+      "format_check": "Validate field formats match specifications",
+      "uniqueness_check": "Ensure uniqueness constraints satisfied",
+      "distribution_test": "Compare generated vs target distributions",
+      "correlation_test": "Check preservation of field relationships",
+      "startswith_check": "Validate prefix derivation rules"
+    }
+  },
+
+  "scaling_guidelines": {
+    "ratio_preservation": {
+      "description": "Maintain relative frequencies when scaling",
+      "applies_to": ["categorical_distributions", "foreign_key_multiplicity"]
+    },
+    "statistical_stability": {
+      "description": "Ensure distributions remain stable at scale",
+      "applies_to": ["numerical_measures", "rate_parameters"]
+    },
+    "performance_considerations": {
+      "batch_processing": "Process in chunks for memory efficiency",
+      "pool_caching": "Cache reference pools for reuse",
+      "parallel_generation": "Generate independent fields in parallel"
+    }
+  },
+
+  "extensibility": {
+    "custom_strategies": {
+      "interface": "plugin_based",
+      "requirements": ["parameter_schema", "validation_method", "documentation"]
+    },
+    "custom_encodings": {
+      "interface": "format_transformer",
+      "requirements": ["encode_method", "decode_method", "validation"]
+    },
+    "custom_relationships": {
+      "interface": "relationship_pattern",
+      "requirements": ["dependency_type", "generation_order", "validation_rules"]
+    }
+  }
+}

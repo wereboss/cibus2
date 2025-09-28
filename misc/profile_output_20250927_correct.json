@@ -1,0 +1,231 @@
+{
+    "ACCOUNT_NUMBER": {
+        "original_name": "ACCOUNT_NUMBER",
+        "original_spec": "S9(9)",
+        "length": 9,
+        "description": "Unique account numbers",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 20,
+        "unique_percentage": 100.0,
+        "is_categorical": false,
+        "sample_values": [
+            "010000010",
+            "010000019",
+            "010000008",
+            "010000020",
+            "010000005",
+            "010000015",
+            "010000013",
+            "010000016",
+            "010000017",
+            "010000009"
+        ],
+        "metrics": {
+            "min": 10000001.0,
+            "max": 10000020.0,
+            "mean": 10000010.5,
+            "median": 10000010.5,
+            "std_dev": 5.916079783099616
+        }
+    },
+    "CLIENT_ID": {
+        "original_name": "CLIENT_ID",
+        "original_spec": "S9(11)",
+        "length": 11,
+        "description": "Client identifier, identical for all accounts of a given client",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 10,
+        "unique_percentage": 50.0,
+        "is_categorical": false,
+        "sample_values": [
+            "09900000003",
+            "09900000006",
+            "09900000004",
+            "09900000010",
+            "09900000001",
+            "09900000001",
+            "09900000009",
+            "09900000003",
+            "09900000005",
+            "09900000008"
+        ],
+        "metrics": {
+            "min": 9900000001.0,
+            "max": 9900000010.0,
+            "mean": 9900000005.5,
+            "median": 9900000005.5,
+            "std_dev": 2.946898458772509
+        }
+    },
+    "PROD_TYPE_CODE": {
+        "original_name": "PROD_TYPE_CODE",
+        "original_spec": "S9(3)",
+        "length": 3,
+        "description": "Product type code indicating specific product of account",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 5,
+        "unique_percentage": 25.0,
+        "is_categorical": true,
+        "enum_values": {
+            "011": 4,
+            "022": 4,
+            "033": 4,
+            "044": 4,
+            "055": 4
+        },
+        "metrics": {
+            "min": 11.0,
+            "max": 55.0,
+            "mean": 33.0,
+            "median": 33.0,
+            "std_dev": 15.960477502420257
+        }
+    },
+    "SUB_PROD_CODE": {
+        "original_name": "SUB_PROD_CODE",
+        "original_spec": "S9(4)",
+        "length": 4,
+        "description": "Sub-product code for sub-types within a product following specific properties",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 10,
+        "unique_percentage": 50.0,
+        "is_categorical": false,
+        "sample_values": [
+            "0331",
+            "0332",
+            "0221",
+            "0441",
+            "0222",
+            "0221",
+            "0441",
+            "0551",
+            "0111",
+            "0111"
+        ],
+        "metrics": {
+            "min": 111.0,
+            "max": 552.0,
+            "mean": 331.5,
+            "median": 331.5,
+            "std_dev": 159.6055994269031
+        }
+    },
+    "AVAILABLE_BALANCE": {
+        "original_name": "AVAILABLE_BALANCE",
+        "original_spec": "S9(7)V99",
+        "length": 9,
+        "description": "Available balance amount of specific account",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 18,
+        "unique_percentage": 90.0,
+        "is_categorical": false,
+        "sample_values": [
+            "004000000",
+            "003500000",
+            "002200000",
+            "009500000",
+            "007500000",
+            "001200000",
+            "020000000",
+            "001000050",
+            "025000000",
+            "010000000"
+        ],
+        "metrics": {
+            "min": 10000.5,
+            "max": 250000.0,
+            "mean": 76200.025,
+            "median": 67500.0,
+            "std_dev": 63473.630579634155
+        }
+    },
+    "CURRENCY_CODE": {
+        "original_name": "CURRENCY_CODE",
+        "original_spec": "X(3)",
+        "length": 3,
+        "description": "currency of the specific account",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 3,
+        "unique_percentage": 15.0,
+        "is_categorical": true,
+        "enum_values": {
+            "SGD": 16,
+            "USD": 2,
+            "EUR": 2
+        }
+    },
+    "PAYMENT_DUE_DATE": {
+        "original_name": "PAYMENT_DUE_DATE",
+        "original_spec": "S9(8)",
+        "length": 8,
+        "description": "Date by when the payment to account needs to be made",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 20,
+        "unique_percentage": 100.0,
+        "is_categorical": false,
+        "sample_values": [
+            "20251213",
+            "20251214",
+            "20251210",
+            "20251206",
+            "20251202",
+            "20251216",
+            "20251215",
+            "20251212",
+            "20251204",
+            "20251205"
+        ],
+        "metrics": {
+            "min": 20251127.0,
+            "max": 20251217.0,
+            "mean": 20251196.85,
+            "median": 20251207.5,
+            "std_dev": 30.035549113114538
+        }
+    },
+    "INTEREST_RATE": {
+        "original_name": "INTEREST_RATE",
+        "original_spec": "S9(3)V99(4)",
+        "length": 7,
+        "description": "the current effective interest rate of account",
+        "total_count": 20,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 10,
+        "unique_percentage": 50.0,
+        "is_categorical": false,
+        "sample_values": [
+            "0012345",
+            "0901234",
+            "0789012",
+            "0456789",
+            "0234567",
+            "0345678",
+            "0123456",
+            "0901234",
+            "0012345",
+            "0456789"
+        ],
+        "metrics": {
+            "min": 1.2345,
+            "max": 90.1234,
+            "mean": 49.99995,
+            "median": 51.23395,
+            "std_dev": 30.933837112584254
+        }
+    }
+}

@@ -1,0 +1,363 @@
+I need you to act as a data analyst. Your task is to examine the provided JSON data profile of a fixed-length flat file and generate a set of detailed, actionable data generation rules. The goal is to create synthetic data that mimics the original dataset's complex patterns and inter-attribute relationships, not just random values.
+
+Your assessment should be a clear. Be as specific as possible, referencing column names, data types, and values from the JSON.
+
+Here are the specific insights I need you to infer and document:
+
+1. Primary and Foreign Key Relationships: Identify primary key (unique_percentage = 100%) and foreign key (unique_percentage < 100% and a likely link to a primary key) fields.
+
+2. Parent-Child Relationships: Based on naming conventions, description and sample values, identify which fields are likely dependent on others. For example, sub-product-type-code is probably dependent on sub-product-type-code.
+
+3. Data Distributions: For each numeric field, specify a generation strategy based on the provided min, max, mean, and std_dev metrics (e.g., normal, uniform).
+
+4. Categorical Values: For categorical fields, document the exact list of enum_values and their frequencies to be used for generation.
+
+5. Conditional Logic & Dependencies: Infer specific business rules based on the inferred relationships between fields. For example, "if product-type is 'Credit-Card', then currency-code must be 'USD' or 'EUR'."
+
+6. Formatting Rules: Note any specific formatting, such as zero-padding or fixed lengths.
+
+Aligned to the goal, generate the output in a JSON format which would be necessarily detailed and still leverageable by a synthesis utility. Generate only the JSON output and dont include any additional text.
+------------
+follow the below schema:
+{
+  "global_config": {
+    "default_row_count": "<integer>",
+    "scaling_factor": "<float>",
+    "random_seed": "<integer>"
+  },
+  "fields": [
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "sequential_unique_id",
+        "parameters": {
+          "prefix": "<string>",
+          "start_value": "<integer>",
+          "length": "<integer>",
+          "unique": true
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "foreign_key_pool",
+        "parameters": {
+          "pool_size_ratio": "<float>",
+          "prefix": "<string>",
+          "length": "<integer>",
+          "distribution": "<string>",
+          "distribution_params": {
+            "lambda": "<float>"
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "<string>",
+          "mappings": {
+            "value1": {
+              "values": ["<string>"],
+              "weights": ["<float>"]
+            }
+          }
+        }
+      },
+      "dependencies": [
+        {
+          "field": "<string>",
+          "rule": "<string>"
+        }
+      ]
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": "<float>",
+          "sigma": "<float>",
+          "min_value": "<float>",
+          "max_value": "<float>",
+          "decimal_places": "<integer>"
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "uniform_date_range",
+        "parameters": {
+          "start_date": "<string>",
+          "end_date": "<string>",
+          "length": "<integer>",
+          "unique": "<boolean>"
+        }
+      },
+      "dependencies": []
+    }
+  ]
+}
+------------
+
+
+
+Here is the inputJSON to evaulate:
+
+{
+    "ACCOUNT_NUMBER": {
+        "original_name": "ACCOUNT_NUMBER",
+        "original_spec": "S9(9)",
+        "length": 9,
+        "description": "Unique account numbers",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 40,
+        "unique_percentage": 100.0,
+        "is_categorical": false,
+        "sample_values": [
+            "010000017",
+            "010000014",
+            "010000007",
+            "010000001",
+            "010000030",
+            "010000023",
+            "010000002",
+            "010000025",
+            "010000005",
+            "010000036"
+        ],
+        "metrics": {
+            "min": 10000001.0,
+            "max": 10000040.0,
+            "mean": 10000020.5,
+            "median": 10000020.5,
+            "std_dev": 11.69045194450012
+        }
+    },
+    "CLIENT_ID": {
+        "original_name": "CLIENT_ID",
+        "original_spec": "S9(11)",
+        "length": 11,
+        "description": "Client identifier, identical for all accounts of a given client",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 16,
+        "unique_percentage": 40.0,
+        "is_categorical": true,
+        "enum_values": {
+            "09900000001": 6,
+            "09900000003": 4,
+            "09900000005": 4,
+            "09900000007": 4,
+            "09900000010": 4,
+            "09900000002": 3,
+            "09900000004": 3,
+            "09900000009": 3,
+            "09900000006": 2,
+            "09900000008": 1,
+            "09900000011": 1,
+            "09900000014": 1,
+            "09900000016": 1,
+            "09900000038": 1,
+            "09900000018": 1,
+            "09900000019": 1
+        },
+        "metrics": {
+            "min": 9900000001.0,
+            "max": 9900000038.0,
+            "mean": 9900000007.175,
+            "median": 9900000005.5,
+            "std_dev": 6.830878233133572
+        }
+    },
+    "PROD_TYPE_CODE": {
+        "original_name": "PROD_TYPE_CODE",
+        "original_spec": "S9(3)",
+        "length": 3,
+        "description": "Product type code indicating specific product of account",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 5,
+        "unique_percentage": 12.5,
+        "is_categorical": true,
+        "enum_values": {
+            "011": 16,
+            "044": 8,
+            "055": 8,
+            "022": 4,
+            "033": 4
+        },
+        "metrics": {
+            "min": 11.0,
+            "max": 55.0,
+            "mean": 29.7,
+            "median": 27.5,
+            "std_dev": 17.997435714781492
+        }
+    },
+    "SUB_PROD_CODE": {
+        "original_name": "SUB_PROD_CODE",
+        "original_spec": "S9(4)",
+        "length": 4,
+        "description": "Sub-product code for sub-types within a product following specific properties",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 8,
+        "unique_percentage": 20.0,
+        "is_categorical": true,
+        "enum_values": {
+            "0111": 12,
+            "0112": 4,
+            "0222": 4,
+            "0332": 4,
+            "0441": 4,
+            "0442": 4,
+            "0551": 4,
+            "0552": 4
+        },
+        "metrics": {
+            "min": 111.0,
+            "max": 552.0,
+            "mean": 298.5,
+            "median": 277.0,
+            "std_dev": 180.06907506529762
+        }
+    },
+    "AVAILABLE_BALANCE": {
+        "original_name": "AVAILABLE_BALANCE",
+        "original_spec": "S9(7)V99",
+        "length": 9,
+        "description": "Available balance amount of specific account",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 26,
+        "unique_percentage": 65.0,
+        "is_categorical": false,
+        "sample_values": [
+            "001230000",
+            "001000050",
+            "002520000",
+            "008050000",
+            "002540000",
+            "005040000",
+            "009510000",
+            "002500000",
+            "004030000",
+            "004030000"
+        ],
+        "metrics": {
+            "min": 10000.5,
+            "max": 250200.0,
+            "mean": 76472.525,
+            "median": 67950.0,
+            "std_dev": 62622.730186712724
+        }
+    },
+    "CURRENCY_CODE": {
+        "original_name": "CURRENCY_CODE",
+        "original_spec": "X(3)",
+        "length": 3,
+        "description": "currency of the specific account",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 3,
+        "unique_percentage": 7.5,
+        "is_categorical": true,
+        "enum_values": {
+            "SGD": 32,
+            "USD": 4,
+            "EUR": 4
+        }
+    },
+    "PAYMENT_DUE_DATE": {
+        "original_name": "PAYMENT_DUE_DATE",
+        "original_spec": "S9(8)",
+        "length": 8,
+        "description": "Date by when the payment to account needs to be made",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 20,
+        "unique_percentage": 50.0,
+        "is_categorical": false,
+        "sample_values": [
+            "20251202",
+            "20251217",
+            "20251207",
+            "20251203",
+            "20251209",
+            "20251208",
+            "20251127",
+            "20251210",
+            "20251211",
+            "20251214"
+        ],
+        "metrics": {
+            "min": 20251127.0,
+            "max": 20251217.0,
+            "mean": 20251196.85,
+            "median": 20251207.5,
+            "std_dev": 29.647977403232144
+        }
+    },
+    "INTEREST_RATE": {
+        "original_name": "INTEREST_RATE",
+        "original_spec": "S9(3)V99(4)",
+        "length": 7,
+        "description": "the current effective interest rate of account",
+        "total_count": 40,
+        "null_count": 0,
+        "null_percentage": 0.0,
+        "unique_count": 20,
+        "unique_percentage": 50.0,
+        "is_categorical": false,
+        "sample_values": [
+            "0787012",
+            "0454789",
+            "0232567",
+            "0121456",
+            "0782012",
+            "0237567",
+            "0121456",
+            "0893123",
+            "0013345",
+            "0343678"
+        ],
+        "metrics": {
+            "min": 1.3345,
+            "max": 90.4234,
+            "mean": 49.88995,
+            "median": 50.98395,
+            "std_dev": 30.518777701479255
+        }
+    }
+}

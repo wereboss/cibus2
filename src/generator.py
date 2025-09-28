@@ -8,6 +8,7 @@ import re
 from typing import Dict, Any, List
 
 # Set up logging for this module
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class DataGenerator:
@@ -77,7 +78,6 @@ class DataGenerator:
             logger.warning(f"Pool size for '{field_name}' is 0. Setting to 1.")
             num_unique_keys = 1
 
-        # Generate sequential keys, ensuring they have the correct length and prefix
         pool_keys = [f"{prefix}{i:0{length - len(prefix)}d}" for i in range(1, num_unique_keys + 1)]
         
         self.data_pools[field_name] = pool_keys
@@ -88,7 +88,8 @@ class DataGenerator:
         Generates and returns a list of formatted records.
         """
         output_records = []
-        for _ in range(num_records):
+        for i in range(num_records):
+            logger.debug(f"Generating record {i+1} of {num_records}...")
             record = self._generate_record()
             formatted_record = self._format_record(record)
             output_records.append(formatted_record)
@@ -103,7 +104,9 @@ class DataGenerator:
         record = {}
         for field_spec in self.generation_order:
             field_name = field_spec['name']
+            logger.debug(f"  Generating value for field: {field_name}")
             record[field_name] = self._generate_field_value(field_spec, record)
+        logger.debug(f"  Generated record: {record}")
         return record
 
     def _generate_field_value(self, field_spec: Dict[str, Any], record: Dict[str, Any]) -> Any:
@@ -139,7 +142,7 @@ class DataGenerator:
         current_id = self.next_sequential_ids[field_name]
         self.next_sequential_ids[field_name] += 1
         
-        return f"{current_id}".zfill(length)
+        return str(current_id)
 
     def _generate_categorical_weighted(self, field_spec: Dict[str, Any], params: Dict[str, Any]) -> str:
         """

@@ -1,0 +1,194 @@
+{
+  "global_config": {
+    "default_row_count": 20,
+    "scaling_factor": 1.0,
+    "random_seed": 42
+  },
+  "fields": [
+    {
+      "name": "ACCOUNT_NUMBER",
+      "description": "Unique account numbers",
+      "original_spec": "S9(9)",
+      "generation_order": 1,
+      "generation": {
+        "method": "sequential_unique_id",
+        "parameters": {
+          "prefix": "01",
+          "start_value": 1,
+          "length": 9
+        }
+      },
+      "sample_stats": {
+        "unique_percentage": 1.0,
+        "min": 10000001,
+        "max": 10000020,
+        "mean": 10000010.5,
+        "std_dev": 5.916
+      }
+    },
+    {
+      "name": "CLIENT_ID",
+      "description": "Client identifier, identical for all accounts of a given client",
+      "original_spec": "S9(11)",
+      "generation_order": 2,
+      "generation": {
+        "method": "foreign_key_pool",
+        "parameters": {
+          "pool_size_ratio": 0.5,
+          "prefix": "0990",
+          "length": 11,
+          "distribution": "poisson",
+          "distribution_params": {
+            "lambda": 2
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "PROD_TYPE_CODE",
+      "description": "Product type code indicating specific product of account",
+      "original_spec": "S9(3)",
+      "generation_order": 3,
+      "generation": {
+        "method": "categorical_weighted",
+        "parameters": {
+          "values": ["011", "022", "033", "044", "055"],
+          "weights": [0.2, 0.2, 0.2, 0.2, 0.2],
+          "length": 3
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "SUB_PROD_CODE",
+      "description": "Sub-product code for sub-types within a product following specific properties",
+      "original_spec": "S9(4)",
+      "generation_order": 4,
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "PROD_TYPE_CODE",
+          "mappings": {
+            "011": ["0111", "0112"],
+            "022": ["0221", "0222"],
+            "033": ["0331", "0332"],
+            "044": ["0441", "0442"],
+            "055": ["0551", "0552"]
+          },
+          "length": 4
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "prefix_match"
+        }
+      ]
+    },
+    {
+      "name": "AVAILABLE_BALANCE",
+      "description": "Available balance amount of specific account",
+      "original_spec": "S9(7)V99",
+      "generation_order": 6,
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": 76200.025,
+          "sigma": 63473.63,
+          "min_value": 10000.50,
+          "max_value": 250000.00,
+          "decimal_places": 2,
+          "length": 9
+        }
+      },
+      "dependencies": [
+        {
+          "field": "CURRENCY_CODE",
+          "rule": "adjust_value_by_currency",
+          "logic": "if CURRENCY_CODE is 'USD' or 'EUR', adjust balance by factor 1.1"
+        }
+      ],
+      "sample_stats": {
+        "min": 10000.5,
+        "max": 250000.0,
+        "mean": 76200.025,
+        "std_dev": 63473.63
+      }
+    },
+    {
+      "name": "CURRENCY_CODE",
+      "description": "currency of the specific account",
+      "original_spec": "X(3)",
+      "generation_order": 5,
+      "generation": {
+        "method": "conditional_categorical"
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "conditional_mapping",
+          "mapping": {
+            "default": {
+              "values": ["SGD"],
+              "weights": [1.0]
+            },
+            "044": {
+              "values": ["USD", "EUR"],
+              "weights": [0.5, 0.5]
+            },
+            "055": {
+              "values": ["USD", "EUR"],
+              "weights": [0.5, 0.5]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "PAYMENT_DUE_DATE",
+      "description": "Date by when the payment to account needs to be made",
+      "original_spec": "S9(8)",
+      "generation_order": 7,
+      "generation": {
+        "method": "uniform_date_range",
+        "parameters": {
+          "start_date": "2025-11-27",
+          "end_date": "2025-12-17",
+          "length": 8
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "INTEREST_RATE",
+      "description": "the current effective interest rate of account",
+      "original_spec": "S9(3)V99(4)",
+      "generation_order": 8,
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": 50.0,
+          "sigma": 30.93,
+          "min_value": 1.2345,
+          "max_value": 90.1234,
+          "decimal_places": 4,
+          "length": 7
+        }
+      },
+      "dependencies": [
+        {
+          "field": "PROD_TYPE_CODE",
+          "rule": "conditional_distribution_by_product",
+          "logic": "if PROD_TYPE_CODE is '011' or '022', use low rate params; otherwise, use high rate params"
+        }
+      ],
+      "sample_stats": {
+        "min": 1.2345,
+        "max": 90.1234,
+        "mean": 49.99995,
+        "std_dev": 30.93
+      }
+    }
+  ]
+}
