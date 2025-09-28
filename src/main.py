@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -10,6 +11,7 @@ from .db_manager import create_db_and_table, insert_run_record
 from .config_manager import load_config
 from .profiler import run_profiling
 from .generator import DataGenerator
+from .rules_validator import RulesValidator
 
 # Set up basic logging
 logging.basicConfig(
@@ -68,7 +70,15 @@ def run_generator_mode(args):
     output_file_path = output_folder / output_filename
     
     try:
-        generator = DataGenerator(rules_file_path)
+        # --- NEW LOGIC: Validate and clean the rules file ---
+        with open(rules_file_path, 'r') as f:
+            raw_rules = json.load(f)
+        
+        validator = RulesValidator(raw_rules)
+        cleaned_rules = validator.validate_and_clean()
+        
+        # Instantiate the generator with the cleaned rules (pass dictionary directly)
+        generator = DataGenerator(cleaned_rules)
         records = generator.generate_records(num_records)
 
         with open(output_file_path, 'w') as f:

@@ -2,6 +2,8 @@
 
 import json
 import logging
+import re
+import math
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -35,15 +37,82 @@ class RulesValidator:
         logger.info("Rules JSON successfully validated and cleaned.")
         return self.cleaned_rules
 
+    def _infer_length_from_spec(self, original_spec: str) -> int:
+        """
+        Infers the fixed length of a field from its COBOL specification.
+        """
+        data_type_spec = original_spec.strip().upper()
+        length = 0
+        
+        if 'COMP-3' in data_type_spec:
+            s9_match = re.search(r'S9\((\d+)\)', data_type_spec)
+            v_match = re.search(r'V9+(\(\d+\))?', data_type_spec)
+            s9_len = int(s9_match.group(1)) if s9_match else 0
+            v9_len = int(v_match.group(1).strip('()')) if v_match and v_match.group(1) else len(v_match.group(0).replace('V', '')) if v_match else 0
+            total_digits = s9_len + v9_len
+            length = math.ceil((total_digits + 1) / 2)
+        elif any(x in data_type_spec for x in ['COMP-4', 'COMP-5', 'COMP', 'BINARY']):
+            match = re.search(r'S9\((\d+)\)', data_type_spec)
+            if match:
+                digits = int(match.group(1))
+                if digits <= 4: length = 2
+                elif digits <= 9: length = 4
+                elif digits <= 18: length = 8
+        elif 'X' in data_type_spec:
+            match = re.search(r'X\((\d+)\)', data_type_spec)
+            if match: length = int(match.group(1))
+        elif 'S9' in data_type_spec:
+            s9_match = re.search(r'S9\((\d+)\)', data_type_spec)
+            v_match = re.search(r'V9+(\(\d+\))?', data_type_spec)
+            s9_len = int(s9_match.group(1)) if s9_match else 0
+            v9_len = int(v_match.group(1).strip('()')) if v_match and v_match.group(1) else len(v_match.group(0).replace('V', '')) if v_match else 0
+            length = s9_len + v9_len
+
+        if length == 0:
+            logger.warning(f"Could not parse length from spec: {data_type_spec}. Defaulting to 1.")
+            return 1
+        return length
+
     def _validate_field(self, field: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Validates a single field entry.
+        Validates and cleans a single field entry.
         """
         required_keys = ['name', 'generation_order', 'generation']
         for key in required_keys:
             if key not in field:
                 raise KeyError(f"Field entry is missing a required key: '{key}'. Faulty field: {field}")
         
-        # We can add more specific type and value checks here later.
-        # For now, we'll return a copy of the field assuming basic integrity.
+        # --- FIX: Infer length if missing ---
+        if 'length' not in field['generation']['parameters']:
+            original_spec = field.get('original_spec')
+            if original_spec:
+                inferred_length = self._infer_length_from_spec(original_spec)
+                field['generation']['parameters']['length'] = inferred_length
+                logger.info(f"Inferred missing length for field '{field['name']}' from spec '{original_spec}': {inferred_length}")
+            else:
+                logger.error(f"Field '{field['name']}' is missing both 'length' and 'original_spec'.")
+                raise ValueError(f"Field '{field['name']}' is missing both 'length' and 'original_spec'.")
+
+        # --- FIX: Self-correcting for conditional_categorical ---
+        if field['generation']['method'] == 'conditional_categorical':
+            params = field['generation'].get('parameters', {})
+            parent_field = params.get('parent_field')
+            if not parent_field:
+                logger.warning(f"Field '{field['name']}' is marked as 'conditional_categorical' but has no parent field. Automatically switching to 'categorical_weighted'.")
+                field['generation']['method'] = 'categorical_weighted'
+                
+                if 'mappings' in params:
+                    default_mapping = params['mappings'].get('default')
+                    if default_mapping:
+                        for k, v in default_mapping.items():
+                            field['generation']['parameters'][k] = v
+                    else:
+                        logger.error(f"Failed to find a default mapping for '{field['name']}'.")
+                        raise ValueError(f"Conditional field '{field['name']}' has no valid mapping.")
+                
+                if 'parent_field' in field['generation']['parameters']:
+                    del field['generation']['parameters']['parent_field']
+                if 'mappings' in field['generation']['parameters']:
+                    del field['generation']['parameters']['mappings']
+        
         return field
