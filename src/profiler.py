@@ -157,6 +157,7 @@ def run_profiling(layout_file_path: Path, handoff_file_path: Path, output_file_p
             'original_name': col_name,
             'original_spec': original_spec,
             'length': length,
+            'description': layout_row['description'],
             'total_count': len(df),
             'null_count': len(df) - len(series),
             'null_percentage': round((len(df) - len(series)) / len(df) * 100, 2)
