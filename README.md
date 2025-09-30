@@ -58,6 +58,136 @@ python -m src.main profile --layout [path_to_layout.xlsx] --handoff [path_to_dat
 
 This command will generate a `profile_output_YYYYMMDD_HHMMSS.json` file in the `data/synthetic_data/` directory.
 
+### 2\. LLM-Guided Rule Generation (Phase 2)
+Manually provide the JSON profile from Phase 1 to an LLM. Instruct it to act as a data analyst and generate a new, machine-readable JSON rules file that contains all the necessary generation logic and dependencies.
+
+prompt used:
+```
+I need you to act as a data analyst. Your task is to examine the provided JSON data profile (refer profile_output_first.json) of a fixed-length flat file and generate a set of detailed, actionable data generation rules. The goal is to create synthetic data that mimics the original dataset's complex patterns and inter-attribute relationships, not just random values.
+
+Your assessment should be a clear. Be as specific as possible, referencing column names, data types, and values from the JSON.
+
+Here are the specific insights I need you to infer and document:
+
+1. Primary and Foreign Key Relationships: Identify primary key (unique_percentage = 100%) and foreign key (unique_percentage < 100% and a likely link to a primary key) fields.
+
+2. Parent-Child Relationships: Based on naming conventions, description and sample values, identify which fields are likely dependent on others. For example, sub-product-type-code is probably dependent on sub-product-type-code.
+
+3. Data Distributions: For each numeric field, specify a generation strategy based on the provided min, max, mean, and std_dev metrics (e.g., normal, uniform).
+
+4. Categorical Values: For categorical fields, document the exact list of enum_values and their frequencies to be used for generation.
+
+5. Conditional Logic & Dependencies: Infer specific business rules based on the inferred relationships between fields. For example, "if product-type is 'Credit-Card', then currency-code must be 'USD' or 'EUR'."
+
+6. Formatting Rules: Note any specific formatting, such as zero-padding or fixed lengths.
+
+Aligned to the goal, generate the output in a JSON format below, which would be necessarily detailed and still leverageable by a synthesis utility. Generate only the JSON output and dont include any additional text.
+
+JSON output schema:
+
+{
+  "global_config": {
+    "default_row_count": "<integer>",
+    "scaling_factor": "<float>",
+    "random_seed": "<integer>"
+  },
+  "fields": [
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "sequential_unique_id",
+        "parameters": {
+          "prefix": "<string>",
+          "start_value": "<integer>",
+          "length": "<integer>",
+          "unique": true
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "foreign_key_pool",
+        "parameters": {
+          "pool_size_ratio": "<float>",
+          "prefix": "<string>",
+          "length": "<integer>",
+          "distribution": "<string>",
+          "distribution_params": {
+            "lambda": "<float>"
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "<string>",
+          "mappings": {
+            "value1": {
+              "values": ["<string>"],
+              "weights": ["<float>"]
+            }
+          }
+        }
+      },
+      "dependencies": [
+        {
+          "field": "<string>",
+          "rule": "<string>"
+        }
+      ]
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": "<float>",
+          "sigma": "<float>",
+          "min_value": "<float>",
+          "max_value": "<float>",
+          "decimal_places": "<integer>"
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "uniform_date_range",
+        "parameters": {
+          "start_date": "<string>",
+          "end_date": "<string>",
+          "length": "<integer>",
+          "unique": "<boolean>"
+        }
+      },
+      "dependencies": []
+    }
+  ]
+}
+```
+
 ### 3\. Generating Synthetic Data (Phase 3)
 
 To generate a new dataset from a set of rules, run the `generate` subcommand with a JSON rules file.
