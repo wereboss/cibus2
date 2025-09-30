@@ -197,3 +197,33 @@ python -m src.main generate --rules [path_to_rules.json] --num_records 10000
 ```
 
 This will create a `generated_data_YYYYMMDD_HHMMSS.txt` file containing 10,000 synthetic records.
+
+### 4\. Evaulating the generated data (phase 4)
+
+Generate the data profile of the newly generated synthetic data and utilize LLM to compare against the original profile and suggest corrections
+
+```bash
+python -m src.main profile --layout [path_to_layout.xlsx] --handoff [path_to_synthetic_data.txt]
+```
+
+Prompt used for :
+```
+I have two JSON data profiles. The first is 'Original_Profile' from a small sample dataset. The second is 'Generated_Profile' from a large synthetic dataset created based on rules inferred from the first.
+
+Your task is to act as a data analyst and provide a comprehensive, side-by-side analysis. Highlight key similarities and, more importantly, any significant discrepancies or mismatches.
+
+For your analysis, focus on:
+1. Statistical metrics (min, max, mean, std_dev) for each field.
+2. Uniqueness and distribution of categorical fields (unique_count and enum_values).
+3. Consistency in inferred relationships and patterns.
+
+structure your response such that, for every column, include the below sub-bullets
+- "original" - which mentions the column's nature and distribution in the original profile
+- "generated" - which mentions the same column's nature and distribution in the generated data profile
+- "observations" - mention your observations on how the column rendering behaved after synthetic data generation
+- "Fix suggestions" - give a clear succinct instruction on how this specific column synthetic data can be fixed
+
+at the end include a "key takeaways" section, which succinctly summarises the key observations & fixes in a prioritised order. 
+
+Do not provide any new technical rules or code yet. Your output should be a clear, written analysis.
+```
