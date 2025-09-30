@@ -1,0 +1,101 @@
+{
+  "global_config": {
+    "default_row_count": "<integer>",
+    "scaling_factor": "<float>",
+    "random_seed": "<integer>"
+  },
+  "fields": [
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "sequential_unique_id",
+        "parameters": {
+          "prefix": "<string>",
+          "start_value": "<integer>",
+          "length": "<integer>",
+          "unique": true
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "foreign_key_pool",
+        "parameters": {
+          "pool_size_ratio": "<float>",
+          "prefix": "<string>",
+          "length": "<integer>",
+          "distribution": "<string>",
+          "distribution_params": {
+            "lambda": "<float>"
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "conditional_categorical",
+        "parameters": {
+          "parent_field": "<string>",
+          "mappings": {
+            "value1": {
+              "values": ["<string>"],
+              "weights": ["<float>"]
+            }
+          }
+        }
+      },
+      "dependencies": [
+        {
+          "field": "<string>",
+          "rule": "<string>"
+        }
+      ]
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "truncated_normal",
+        "parameters": {
+          "mu": "<float>",
+          "sigma": "<float>",
+          "min_value": "<float>",
+          "max_value": "<float>",
+          "decimal_places": "<integer>"
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "original_spec": "<string>",
+      "generation_order": "<integer>",
+      "generation": {
+        "method": "uniform_date_range",
+        "parameters": {
+          "start_date": "<string>",
+          "end_date": "<string>",
+          "length": "<integer>",
+          "unique": "<boolean>"
+        }
+      },
+      "dependencies": []
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+
+---
+
+### ACCOUNT_NUMBER
+
+* **Original**
+
+  * Unique 9-digit identifiers, fully unique across 20 records.
+  * Range: 10000001–10000020, evenly distributed.
+  * Std. Dev.: ~5.9, very tight incremental sequence.
+
+* **Generated**
+
+  * Unique across 5000 records.
+  * Range: 10000001–10005000, sequential spread.
+  * Std. Dev.: ~1443, much wider distribution but still sequential.
+
+* **Observations**
+
+  * Both datasets preserved uniqueness and 9-digit formatting.
+  * Generated data correctly scales range with 5000 records.
+
+* **Fix Suggestions**
+
+  * No fix needed. Behavior is consistent and correct.
+
+---
+
+### CLIENT_ID
+
+* **Original**
+
+  * 11-digit IDs, 10 unique clients across 20 accounts (2 accounts per client).
+  * Range: 9900000001–9900000010.
+  * Duplicates represent multiple accounts for same client.
+
+* **Generated**
+
+  * 4306 unique IDs across 5000 records (~1.16 accounts per client).
+  * Range: 9900000005–9900015999.
+  * Very high uniqueness, low duplication.
+
+* **Observations**
+
+  * Original showed **systematic duplication** (client has multiple accounts).
+  * Generated broke this relationship by over-randomizing IDs → mostly unique, not grouped.
+
+* **Fix Suggestions**
+
+  * Adjust generation to ensure controlled duplication (e.g., 2–3 accounts per client).
+  * Keep client ID ranges consistent with original compact span.
+
+---
+
+### PROD_TYPE_CODE
+
+* **Original**
+
+  * Exactly 5 categories (`011, 022, 033, 044, 055`), perfectly balanced (4 each).
+
+* **Generated**
+
+  * Same 5 categories but heavily imbalanced:
+
+    * `011`: 2001, `044`: 1006, `055`: 985, `022`: 509, `033`: 499.
+
+* **Observations**
+
+  * Original was **uniform categorical distribution**.
+  * Generated skewed frequencies → ~40% concentration in `011`.
+
+* **Fix Suggestions**
+
+  * Enforce equal or proportional category distribution during generation.
+  * Avoid bias toward one product type unless intentional.
+
+---
+
+### SUB_PROD_CODE
+
+* **Original**
+
+  * 10 unique values, moderately duplicated (50% uniqueness).
+  * Codes map logically to product types (e.g., `0111`, `0221`, etc.).
+
+* **Generated**
+
+  * 8 unique values, categorical.
+  * Skewed distribution with `0111` dominating (1496 of 5000).
+  * Some codes missing compared to original (e.g., `0331`, `0221`).
+
+* **Observations**
+
+  * Relationship between **PROD_TYPE_CODE → SUB_PROD_CODE** not fully preserved.
+  * Category imbalance is visible.
+
+* **Fix Suggestions**
+
+  * Restore missing sub-product codes.
+  * Ensure mapping integrity between product and sub-product.
+  * Balance sub-code distribution.
+
+---
+
+### AVAILABLE_BALANCE
+
+* **Original**
+
+  * Range: 10,000.5–250,000.0.
+  * Mean: ~76,200, wide std. dev. (~63k).
+  * 90% unique, realistic spread.
+
+* **Generated**
+
+  * Range: 10,048–246,922 (similar span).
+  * Mean: ~92,318, tighter std. dev. (~49k).
+  * 100% unique (every record different).
+
+* **Observations**
+
+  * Value ranges consistent with original.
+  * Distribution slightly more compact.
+  * Loss of partial duplication (original had 10% repetition).
+
+* **Fix Suggestions**
+
+  * Allow small duplication for realism.
+  * Slightly widen balance variance to match original std. dev.
+
+---
+
+### CURRENCY_CODE
+
+* **Original**
+
+  * Categories: `SGD` (80%), `USD` (10%), `EUR` (10%).
+  * Clear dominant currency.
+
+* **Generated**
+
+  * Categories: `SGD` (75%), `USD` (13%), `EUR` (12%).
+
+* **Observations**
+
+  * Distribution closely preserved, only slightly shifted.
+  * Strong similarity.
+
+* **Fix Suggestions**
+
+  * Minor adjustment to exactly preserve original proportions.
+
+---
+
+### PAYMENT_DUE_DATE
+
+* **Original**
+
+  * Fully unique across 20 records.
+  * Range: 20251127–20251217 (spanning ~20 days).
+
+* **Generated**
+
+  * Only 21 unique dates across 5000 records (repeated many times).
+  * Same range preserved.
+
+* **Observations**
+
+  * Generated data broke uniqueness.
+  * Collapsed to very small date set (looks bucketed).
+
+* **Fix Suggestions**
+
+  * Generate unique or near-unique dates (at least proportional to record size).
+  * Preserve continuous distribution.
+
+---
+
+### INTEREST_RATE
+
+* **Original**
+
+  * Range: 1.2345–90.1234.
+  * Moderate duplication (50% unique).
+  * Std. dev.: ~31.
+
+* **Generated**
+
+  * Range: 1.33–90.39, similar to original.
+  * Nearly fully unique (99.7%).
+  * Std. dev.: ~22, narrower spread.
+
+* **Observations**
+
+  * Value range preserved well.
+  * Over-randomized uniqueness (lost natural duplication).
+  * Less variation in spread.
+
+* **Fix Suggestions**
+
+  * Allow controlled duplication in values.
+  * Broaden variance to match original spread.
+
+---
+
+## Key Takeaways (Prioritized)
+
+1. **CLIENT_ID** → Biggest mismatch: lost duplication pattern (clients having multiple accounts). Must fix for relationship integrity.
+2. **PROD_TYPE_CODE & SUB_PROD_CODE** → Category distributions skewed; sub-product mapping partially broken. Needs balancing and restoration of missing codes.
+3. **PAYMENT_DUE_DATE** → Lost uniqueness, collapsed into 21 repeated dates. Needs unique distribution scaled to dataset size.
+4. **INTEREST_RATE & AVAILABLE_BALANCE** → Ranges correct, but lost duplication and slightly reduced variance. Should restore controlled duplication and spread.
+5. **CURRENCY_CODE** → Close to original, only slight adjustments needed.
+6. **ACCOUNT_NUMBER** → Perfectly consistent, no issues.
+
+---
